@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GW Realty Inventory Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ink:#15201C; --body:#3B4A44; --muted:#5B6B65; --line:#D9E0DD;
+  --bg:#F3F5F4; --bg2:#E9EEEC; --card:#FFFFFF; --soft:#F6F8F7;
+  --accent:#0E7C66; --accent-soft:#E2F2EE; --accent-lite:#5FD3B4;
+  --dark:#15201C; --amber:#9A5A08; --amber-soft:#FBEFDC; --red:#B23A2E; --red-soft:#F9E3E0;
+  --ai:#5B4BC4; --ai-soft:#ECEAFB;
+  --tg:#E6F0FA; --tg-ink:#1D4A73;
+  --display:'Bricolage Grotesque','Segoe UI',Arial,sans-serif;
+  --text:'Instrument Sans','Segoe UI',Arial,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--text);font-size:16px;line-height:1.5}
+section{padding-block:56px;padding-inline:20px}
+.alt{background:var(--bg2)}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
+h1,h2,h3,h4,p{margin:0}
+.eyebrow{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,6vw,60px);line-height:1.05;color:#F3F5F4;text-wrap:balance}
+h2{font-family:var(--display);font-weight:700;font-size:clamp(26px,3.6vw,36px);line-height:1.12;text-wrap:balance}
+.sub{color:var(--muted);max-width:66ch}
+.hero{background:var(--dark);color:#E6ECE9;padding-block:72px 56px}
+.hero .sub{color:#A9B8B2;font-size:18px}
+.path{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.path span{border:1px solid #33443D;border-radius:999px;padding:6px 14px;font-size:14px;color:#D7DFD9}
+.path span.b{border-color:var(--accent-lite);color:var(--accent-lite)}
+.path i{color:#5B6B65;font-style:normal}
+
+/* step rows */
+.step{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:40px;align-items:center}
+.step.wide{grid-template-columns:minmax(0,1fr)}
+.txt{display:flex;flex-direction:column;gap:10px;min-width:0}
+.num{display:flex;align-items:center;gap:10px}
+.num b{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:17px}
+.num span{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.txt h3{font-family:var(--display);font-size:24px;line-height:1.2}
+.txt p{color:var(--body);max-width:56ch}
+.who{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--bg2);color:var(--muted)}
+.who.ai{background:var(--ai-soft);color:var(--ai)}
+.who.mg{background:var(--accent-soft);color:var(--accent)}
+hr.sep{border:none;border-top:1px solid var(--line);margin:4px 0}
+
+/* phone */
+.phone{background:#101815;border-radius:36px;padding:10px;box-shadow:0 18px 40px rgba(21,32,28,.18);width:300px;max-width:100%}
+.scr{background:var(--soft);border-radius:28px;overflow:hidden;height:580px;display:flex;flex-direction:column;font-size:13px}
+.sbar{display:flex;justify-content:space-between;padding:10px 18px 4px;font-size:11px;color:var(--muted);background:var(--card)}
+.top{background:var(--card);padding:8px 16px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.top b{font-family:var(--display);font-size:15px}
+.top span{font-size:11px;color:var(--muted)}
+.body{flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.btn{background:var(--accent);color:#fff;border-radius:10px;padding:11px 16px;text-align:center;font-weight:600;font-size:13px;display:inline-block}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)}
+.field div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--ink)}
+.room{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pic{border-radius:8px;position:relative;aspect-ratio:1/1;background:repeating-linear-gradient(135deg,#D9E0DD 0 7px,#EEF2F0 7px 14px)}
+.pic.n{background:repeating-linear-gradient(135deg,#BFE3D8 0 7px,#E2F2EE 7px 14px)}
+.pic.add{background:var(--card);border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:22px;font-weight:600}
+.pic small{position:absolute;left:4px;bottom:4px;font-size:9.5px;background:rgba(255,255,255,.92);border-radius:4px;padding:0 5px}
+.note{font-size:11px;color:var(--muted)}
+.flag{font-size:11px;background:var(--amber-soft);color:var(--amber);border-radius:6px;padding:6px 8px}
+
+/* desktop */
+.desk{overflow-x:auto;border-radius:14px;box-shadow:0 18px 40px rgba(21,32,28,.14)}
+.win{min-width:940px;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:14px}
+.wbar{background:#E3E8E6;padding:9px 14px;display:flex;align-items:center;gap:8px}
+.wbar i{width:10px;height:10px;border-radius:50%;background:#C5CDCA}
+.wbar span{margin-left:14px;background:#fff;border-radius:6px;padding:3px 12px;font-size:12px;color:var(--muted)}
+.main{padding:22px 26px;display:flex;flex-direction:column;gap:16px;background:var(--soft)}
+.main h4{font-family:var(--display);font-size:21px}
+.form{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.form .field div{font-size:14px}
+.rblock{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;grid-template-columns:230px 1fr;gap:18px}
+.rblock .ph{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-content:start}
+.rblock .ph .pic{aspect-ratio:4/3}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:none}
+.in{border:1px solid var(--line);border-radius:6px;padding:3px 8px;background:#fff;display:inline-block;min-width:34px}
+.ai{font-size:10.5px;font-weight:600;color:var(--ai);background:var(--ai-soft);border-radius:999px;padding:1px 8px}
+.ed{font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 8px}
+.x{color:var(--muted);font-size:13px}
+.addrow{font-size:13px;color:var(--accent);font-weight:600;padding:8px 10px}
+.bar2{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.chip{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;background:var(--accent-soft);color:var(--accent)}
+.chip.am{background:var(--amber-soft);color:var(--amber)} .chip.rd{background:var(--red-soft);color:var(--red)} .chip.gy{background:var(--bg2);color:var(--muted)}
+.list td b{font-size:14px}
+
+/* telegram */
+.tg{background:#DCE6EE;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:10px;width:300px;max-width:100%}
+.msg{background:#fff;border-radius:14px 14px 14px 4px;padding:10px 12px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.msg b{display:block;color:var(--tg-ink);font-size:12px;margin-bottom:2px}
+.msg small{display:block;text-align:right;color:#8a9aa6;font-size:10px;margin-top:4px}
+
+/* report */
+.a4{background:#fff;border:1px solid var(--line);border-radius:6px;padding:26px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 40px rgba(21,32,28,.14);font-size:12px;max-width:560px}
+.a4 .lh{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--dark);padding-bottom:10px}
+.a4 .lh b{font-family:var(--display);font-size:18px}
+.a4 .meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;color:var(--body)}
+.a4 h5{margin:0;font-size:13px;background:var(--bg);padding:6px 10px;border-radius:4px}
+.a4 .ph{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.a4 .ph .pic{aspect-ratio:4/3}
+.a4 th,.a4 td{font-size:11.5px;padding:5px 8px}
+.a4 .signs{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding-top:8px}
+.a4 .signs div{border-top:1px solid var(--ink);padding-top:6px;color:var(--muted)}
+
+footer{background:var(--dark);color:#A9B8B2;font-size:14px;padding-block:26px;padding-inline:20px;text-align:center}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr);gap:20px}.phone,.tg{margin:0 auto}}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow" style="color:var(--accent-lite)">GW Realty · Mockup</p>
+    <h1>Take photos. AI makes the list. Manager approves.</h1>
+    <p class="sub">How the villa inventory works, from move-in to move-out. Names, villas and dates are examples only.</p>
+    <div class="path">
+      <span class="b">Check-in</span><i>→</i><span>Photos</span><i>→</i><span>AI list</span><i>→</i><span>Manager approves</span><i>→</i><span>Saved + reminder</span><i>→</i><span class="b">Check-out</span><i>→</i><span>Same steps, compared</span>
+    </div>
+  </div>
+</section>
+
+<!-- CHECK-IN -->
+<section>
+  <div class="wrap">
+    <div><p class="eyebrow">Part 1</p><h2>Check-in</h2></div>
+
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>10:12</span><span>4G</span></div>
+        <div class="top"><b>Check-in baru</b><span>Wayan</span></div>
+        <div class="body">
+          <div class="field">Villa<div>Villa Madya 1 ▾</div></div>
+          <div class="two"><div class="btn">📷 Ambil foto</div><div class="btn ghost">Pilih dari galeri</div></div>
+          <span class="room">Kamar 1 · 6 foto</span>
+          <div class="grid3"><div class="pic"></div><div class="pic"></div><div class="pic"></div><div class="pic"></div><div class="pic"></div><div class="pic add">+</div></div>
+          <span class="room">Dapur · 4 foto</span>
+          <div class="grid3"><div class="pic"></div><div class="pic"></div><div class="pic"><small>2 hari lalu</small></div><div class="pic add">+</div></div>
+          <div class="flag">1 foto diambil 2 hari lalu. Tetap dipakai?</div>
+          <div style="flex:1"></div>
+          <div class="btn">Kirim 10 foto</div>
+        </div>
+      </div></div>
+      <div class="txt">
+        <div class="num"><b>1</b><span>Take photos</span></div>
+        <h3>Staff only take photos</h3>
+        <p>At the villa, staff photograph each room. Or they take the photos first and upload them later from the office, from the phone's gallery.</p>
+        <p>No typing. Photos are grouped by room. A photo taken on an earlier day gets a small warning, so nobody uses an old picture by mistake.</p>
+        <div><span class="who">Staff</span></div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="step wide">
+      <div class="txt">
+        <div class="num"><b>2</b><span>AI makes the list · Manager checks</span></div>
+        <h3>AI reads the photos and builds the page. The manager checks it and approves.</h3>
+        <p>AI lists every item it sees in each room, with the count and condition. The manager adds the villa details, corrects anything AI got wrong, and approves.</p>
+        <div style="display:flex;gap:8px"><span class="who ai">AI</span><span class="who mg">Manager</span></div>
+      </div>
+      <div class="desk"><div class="win">
+        <div class="wbar"><i></i><i></i><i></i><span>inventory.gwrealtyglobal.com / check-in / Villa Madya 1</span></div>
+        <div class="main">
+          <div class="bar2"><h4>Check-in · Villa Madya 1</h4><span class="chip am">Waiting for approval</span></div>
+          <div class="form">
+            <div class="field">Villa<div>Villa Madya 1</div></div>
+            <div class="field">Tenant<div>[tenant name]</div></div>
+            <div class="field">Check-in date<div>15 Oct 2026</div></div>
+            <div class="field">Check-out date<div>15 Jan 2027</div></div>
+          </div>
+          <div class="rblock">
+            <div class="ph"><div class="pic"></div><div class="pic"></div><div class="pic"></div><div class="pic"></div></div>
+            <div>
+              <b>Bedroom 1</b>
+              <table>
+                <tr><th>Item</th><th>Qty</th><th>Condition</th><th>Source</th><th></th></tr>
+                <tr><td>Bed frame (queen)</td><td><span class="in">1</span></td><td><span class="in">Good ▾</span></td><td><span class="ai">AI</span></td><td class="x">✕</td></tr>
+                <tr><td>Pillows with cover</td><td><span class="in">4</span></td><td><span class="in">Good ▾</span></td><td><span class="ai">AI</span></td><td class="x">✕</td></tr>
+                <tr><td>Bedside table</td><td><span class="in">2</span></td><td><span class="in">Good ▾</span></td><td><span class="ai">AI</span></td><td class="x">✕</td></tr>
+                <tr><td>Reading lamp</td><td><span class="in">2</span></td><td><span class="in">Good ▾</span></td><td><span class="ed">Edited</span></td><td class="x">✕</td></tr>
+                <tr><td>Mattress protector</td><td><span class="in">1</span></td><td><span class="in">Good ▾</span></td><td><span class="ed">Added</span></td><td class="x">✕</td></tr>
+              </table>
+              <div class="addrow">+ Add item</div>
+            </div>
+          </div>
+          <div class="rblock">
+            <div class="ph"><div class="pic"></div><div class="pic"></div><div class="pic"></div><div class="pic"></div></div>
+            <div>
+              <b>Kitchen</b>
+              <table>
+                <tr><th>Item</th><th>Qty</th><th>Condition</th><th>Source</th><th></th></tr>
+                <tr><td>Refrigerator</td><td><span class="in">1</span></td><td><span class="in">Good ▾</span></td><td><span class="ai">AI</span></td><td class="x">✕</td></tr>
+                <tr><td>Wine glasses</td><td><span class="in">6</span></td><td><span class="in">1 cracked ▾</span></td><td><span class="ai">AI</span></td><td class="x">✕</td></tr>
+                <tr><td>Dinner plates</td><td><span class="in">6</span></td><td><span class="in">Good ▾</span></td><td><span class="ai">AI</span></td><td class="x">✕</td></tr>
+              </table>
+              <div class="addrow">+ Add item</div>
+            </div>
+          </div>
+          <div class="bar2"><span class="note" style="font-size:13px">AI found 86 items in 5 rooms. Please check counts of small items (cutlery, glasses).</span><span style="display:flex;gap:10px;align-items:center"><span class="btn" style="padding:11px 22px">✓ Approve check-in</span><span class="btn ghost" style="padding:11px 22px;opacity:.55">📄 Generate PDF</span></span></div>
+          <p class="note" style="font-size:13px;text-align:right">Generate PDF becomes active after approval.</p>
+        </div>
+      </div></div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="step">
+      <div class="tg">
+        <div class="msg"><b>GW Inventaris</b>✅ Check-in approved<br>Villa Madya 1 · [tenant name]<br>86 items · 30 photos<br>Check-out: 15 Jan 2027<small>11:05</small></div>
+        <div class="msg"><b>GW Inventaris</b>⏰ Reminder: check-out in 7 days<br>Villa Madya 1 · 15 Jan 2027<small>08 Jan · 09:00</small></div>
+        <div class="msg"><b>GW Inventaris</b>⏰ Check-out tomorrow<br>Villa Madya 1 · 15 Jan 2027<small>14 Jan · 09:00</small></div>
+      </div>
+      <div class="txt">
+        <div class="num"><b>3</b><span>Saved + reminder</span></div>
+        <h3>Everything is saved, and the check-out date is remembered</h3>
+        <p>Once approved, the photos, the list and the villa details are saved, and a check-in report is made. The system sends a reminder before the check-out date, for example 7 days before and the day before.</p>
+        <div><span class="who ai">Automatic</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="a4" style="width:100%">
+        <div class="lh"><div><b>GW Realty</b><div class="note">Check-in Report · Laporan Check-in</div></div><div class="note" style="text-align:right">No. GWR-0001<br>15 Oct 2026</div></div>
+        <div class="meta"><span><b>Villa:</b> Villa Madya 1</span><span><b>Tenant:</b> [tenant name]</span><span><b>Check-in:</b> 15 Oct 2026</span><span><b>Check-out:</b> 15 Jan 2027</span><span><b>Approved by:</b> [manager]</span><span><b>Items:</b> 86</span></div>
+        <h5>Bedroom 1</h5>
+        <div class="ph"><div class="pic"></div><div class="pic"></div><div class="pic"></div></div>
+        <table>
+          <tr><th>Item</th><th>Qty</th><th>Condition</th></tr>
+          <tr><td>Bed frame (queen)</td><td>1</td><td>Good</td></tr>
+          <tr><td>Pillows with cover</td><td>4</td><td>Good</td></tr>
+          <tr><td>Bedside table</td><td>2</td><td>Good</td></tr>
+        </table>
+        <div class="note">… one block for each room …</div>
+        <div class="signs"><div>Manager</div><div>Tenant</div></div>
+      </div>
+      <div class="txt">
+        <div class="num"><b>4</b><span>The page</span></div>
+        <h3>A clean check-in report, made automatically</h3>
+        <p>After approving, the manager presses <b>Generate PDF</b>. The report shows each room with its photos and the approved list. It is saved to the villa record and can be printed, sent to the tenant, or signed at the villa.</p>
+        <div><span class="btn" style="padding:10px 18px">📄 Generate PDF</span> <span class="btn ghost" style="padding:10px 18px">Download</span></div>
+        <div><span class="who ai">Automatic</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHECK-OUT -->
+<section class="alt">
+  <div class="wrap">
+    <div><p class="eyebrow">Part 2</p><h2>Check-out: the same steps, on the same record</h2></div>
+
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>10:02</span><span>4G</span></div>
+        <div class="top"><b>Check-out</b><span>Wayan</span></div>
+        <div class="body">
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+            <b>Villa Madya 1</b><div class="note">[tenant name] · masuk 15 Okt 2026</div>
+          </div>
+          <div class="two"><div class="btn">📷 Ambil foto</div><div class="btn ghost">Pilih dari galeri</div></div>
+          <span class="room">Kamar 1 · foto check-in → foto baru</span>
+          <div class="grid3"><div class="pic"><small>check-in</small></div><div class="pic n"><small>baru</small></div><div class="pic add">+</div></div>
+          <span class="room">Dapur</span>
+          <div class="grid3"><div class="pic"><small>check-in</small></div><div class="pic n"><small>baru</small></div><div class="pic add">+</div></div>
+          <span class="note">Ambil dari sudut yang sama dengan foto check-in.</span>
+          <div style="flex:1"></div>
+          <div class="btn">Kirim foto</div>
+        </div>
+      </div></div>
+      <div class="txt">
+        <div class="num"><b>5</b><span>Take photos again</span></div>
+        <h3>Staff open the same villa record and take new photos</h3>
+        <p>The check-in photo is shown for each room, so staff can take the new photo from the same angle. Again, photos only, live or uploaded later.</p>
+        <div><span class="who">Staff</span></div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="step wide">
+      <div class="txt">
+        <div class="num"><b>6</b><span>AI compares · Manager approves</span></div>
+        <h3>AI checks the new photos against the check-in list</h3>
+        <p>AI goes through the approved check-in list and marks what it still sees, what is missing and what looks damaged. The manager confirms or corrects each change and approves the check-out report.</p>
+        <div style="display:flex;gap:8px"><span class="who ai">AI</span><span class="who mg">Manager</span></div>
+      </div>
+      <div class="desk"><div class="win">
+        <div class="wbar"><i></i><i></i><i></i><span>inventory.gwrealtyglobal.com / check-out / Villa Madya 1</span></div>
+        <div class="main">
+          <div class="bar2"><h4>Check-out · Villa Madya 1</h4><span class="chip am">3 changes to review</span></div>
+          <table style="background:var(--card);border:1px solid var(--line);border-radius:10px">
+            <tr><th>Item</th><th>Room</th><th>Check-in</th><th>Check-out (AI)</th><th>Photos</th><th>Manager</th></tr>
+            <tr><td><b>Pillows with cover</b></td><td>Bedroom 1</td><td>4 · Good</td><td><span class="in">3</span> · Good</td><td><div style="display:flex;gap:4px"><div class="pic" style="width:56px;aspect-ratio:4/3"></div><div class="pic n" style="width:56px;aspect-ratio:4/3"></div></div></td><td><span class="chip am">Missing 1 ▾</span></td></tr>
+            <tr><td><b>Bed runner</b></td><td>Bedroom 1</td><td>1 · Good</td><td><span class="in">1</span> · Damaged</td><td><div style="display:flex;gap:4px"><div class="pic" style="width:56px;aspect-ratio:4/3"></div><div class="pic n" style="width:56px;aspect-ratio:4/3"></div></div></td><td><span class="chip rd">Damaged ▾</span></td></tr>
+            <tr><td><b>Towels</b></td><td>Bedroom 2</td><td>2 · Good</td><td><span class="in">2</span> · Worn</td><td><div style="display:flex;gap:4px"><div class="pic" style="width:56px;aspect-ratio:4/3"></div><div class="pic n" style="width:56px;aspect-ratio:4/3"></div></div></td><td><span class="chip gy">Normal use ▾</span></td></tr>
+            <tr><td><b>Wine glasses</b></td><td>Kitchen</td><td>6 · 1 cracked</td><td><span class="in">6</span> · 1 cracked</td><td><div style="display:flex;gap:4px"><div class="pic" style="width:56px;aspect-ratio:4/3"></div><div class="pic n" style="width:56px;aspect-ratio:4/3"></div></div></td><td><span class="chip">Same as check-in</span></td></tr>
+          </table>
+          <div class="bar2"><span class="note" style="font-size:13px">83 other items: same as check-in.</span><span style="display:flex;gap:10px;align-items:center"><span class="btn" style="padding:11px 22px">✓ Approve check-out</span><span class="btn ghost" style="padding:11px 22px;opacity:.55">📄 Generate PDF</span></span></div>
+          <p class="note" style="font-size:13px;text-align:right">Generate PDF becomes active after approval.</p>
+        </div>
+      </div></div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="step">
+      <div class="tg">
+        <div class="msg"><b>GW Inventaris</b>📋 Check-out approved<br>Villa Madya 1 · [tenant name]<br>Missing: 1 pillow · Damaged: 1 bed runner<br>📄 PDF generated: GWR-0001-checkout.pdf<small>15 Jan · 11:20</small></div>
+      </div>
+      <div class="txt">
+        <div class="num"><b>7</b><span>Done</span></div>
+        <h3>Final report with before and after</h3>
+        <p>After approving, the manager presses <b>Generate PDF</b>. The check-out report shows check-in and check-out photos side by side, with the list of changes. GW Realty uses it to settle the deposit with the tenant.</p>
+        <div><span class="btn" style="padding:10px 18px">📄 Generate PDF</span> <span class="btn ghost" style="padding:10px 18px">Download</span></div>
+        <div><span class="who ai">Automatic</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMPLE LIST -->
+<section>
+  <div class="wrap">
+    <div><p class="eyebrow">The only overview</p><h2>One simple list of all villas</h2><p class="sub">No complicated dashboard. Just each villa, its dates and what is next.</p></div>
+    <div class="desk"><div class="win">
+      <div class="wbar"><i></i><i></i><i></i><span>inventory.gwrealtyglobal.com</span></div>
+      <div class="main">
+        <div class="bar2"><h4>Villas</h4><span class="btn" style="padding:9px 18px">+ New check-in</span></div>
+        <table class="list" style="background:var(--card);border:1px solid var(--line);border-radius:10px">
+          <tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>
+          <tr><td><b>Villa Madya 1</b></td><td>[tenant]</td><td>15 Oct 2026</td><td>15 Jan 2027</td><td><span class="chip">Occupied</span></td><td class="x">Open ›</td></tr>
+          <tr><td><b>Villa Bromo</b></td><td>[tenant]</td><td>1 Aug 2026</td><td>20 Oct 2026</td><td><span class="chip am">Check-out in 5 days</span></td><td class="x">Open ›</td></tr>
+          <tr><td><b>Villa Sore</b></td><td>[tenant]</td><td>—</td><td>—</td><td><span class="chip am">Waiting for approval</span></td><td class="x">Open ›</td></tr>
+          <tr><td><b>Villa Asmara</b></td><td>—</td><td>—</td><td>—</td><td><span class="chip gy">Empty</span></td><td class="x">Open ›</td></tr>
+        </table>
+      </div>
+    </div></div>
+  </div>
+</section>
+
+<footer>Mockup prepared by Kriyator for GW Realty · October 2026 · Final design may differ in details</footer>
+
+</body>
+</html>
