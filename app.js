@@ -1044,4 +1044,9 @@
   load();
   render();
   if (LIVE) pullAll(true).then(ch => { if (ch) render(true); });
+  // Keep the villa lists fresh on both devices (only on the home screens, never while editing).
+  if (LIVE) setInterval(() => {
+    const h = location.hash.replace(/^#\/?/, '');
+    if ((h === 'mgr' || h === 'staff') && document.visibilityState === 'visible') pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === h) render(true); });
+  }, 8000);
 })();
