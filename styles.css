@@ -239,3 +239,4 @@ th{color:#fff;background:var(--accent)}
 .chipbtn{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .pick button:hover{border-color:var(--accent);box-shadow:0 2px 10px rgba(166,16,17,.12)}
 .toast{background:#222}
+.itbl input.cost{width:120px;text-align:right}

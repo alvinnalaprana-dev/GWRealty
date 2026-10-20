@@ -41,10 +41,10 @@ export default async (req) => {
   if (ep === 'gw-ai-room') {
     if (body.phase === 'out') {
       const items = (body.checkin || []).map(i => ({ id: i.id, qty: i.qty, cond: i.cond, note: '', seen: true }));
-      const tweak = (name, fn) => { const it = items.find((x, k) => (body.checkin[k] || {}).name === name); if (it) fn(it); };
-      tweak('Pillows with cover', it => { it.qty = Math.max(0, it.qty - 1); });
-      tweak('Bed runner', it => { it.cond = 'Damaged'; it.note = 'Stain'; });
-      tweak('White towels', it => { it.cond = 'Worn'; });
+      const tweak = (room, name, fn) => { if (body.room !== room) return; const it = items.find((x, k) => (body.checkin[k] || {}).name === name); if (it) fn(it); };
+      tweak('Bedroom 1', 'Pillows with cover', it => { it.cond = 'Damaged'; it.note = '1 pillow cover torn'; });
+      tweak('Bedroom 1', 'Bed runner', it => { it.cond = 'Damaged'; it.note = 'Stain'; });
+      tweak('Bedroom 2', 'White towels', it => { it.cond = 'Worn'; });
       return json({ ok: true, phase: 'out', quality: 'ok', items, extra: [] });
     }
     const exp = Array.isArray(body.expected) && body.expected.length ? body.expected : [['Item seen in photo', 1]];

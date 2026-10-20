@@ -10,7 +10,7 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v5';
+  const KEY = 'gwinv-demo-v6';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -41,7 +41,7 @@
     const wg = bromoItems.kitchen.find(i => i.name === 'Wine glasses');
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
-      v: 5, role: null, user: null,
+      v: 6, role: null, user: null,
       users: [
         { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr' },
         { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff' }
@@ -62,7 +62,7 @@
   }
   function load() {
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-    if (!S || S.v !== 5) S = seed();
+    if (!S || S.v !== 6) S = seed();
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');
@@ -363,13 +363,13 @@
     const list = (r.outItems || {})[k] || [];
     const checked = list.length && !list[0].unchecked;
     if (!checked) return `<p class="note">${list.length} barang dari check-in. Ambil foto, AI akan mencocokkan.</p>`;
-    const row = it => { const res = result(it); return `<tr class="${res.t !== 'Same' ? 'chg' : ''}"><td><b>${esc(it.name)}</b></td><td>${it.inQty} · ${CONDS_ID[it.inCond]}</td>
-      <td><input class="q" type="number" min="0" inputmode="numeric" data-ok="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Jumlah check-out"></td>
-      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Kondisi check-out">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
-      <td>${chip(res.k, res.t)}</td></tr>`; };
-    const head = '<tr><th>Barang</th><th>Check-in</th><th>Jml</th><th>Kondisi</th><th>Hasil</th></tr>';
-    const ch = list.filter(it => result(it).t !== 'Same');
-    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} perubahan` : 'tidak ada perubahan'}.</b> Cek dan perbaiki bila perlu.</p>
+    const label = res => ({ ok: 'Sama', wr: 'Aus', rd: 'Rusak', gy: 'Belum difoto' }[res.k] || res.t);
+    const row = it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td><b>${esc(it.name)}</b>${it.note ? `<br><span class="note">${esc(it.note)}</span>` : ''}</td><td>${it.inQty} · ${CONDS_ID[it.inCond]}</td>
+      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Hasil check-out">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
+      <td>${chip(res.k, label(res))}</td></tr>`; };
+    const head = '<tr><th>Barang</th><th>Check-in</th><th>Hasil</th><th></th></tr>';
+    const ch = list.filter(it => isChange(result(it)));
+    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} perubahan` : 'tidak ada perubahan'}.</b> Pilih hasil untuk tiap barang: Baik, Aus atau Rusak.</p>
       ${ch.length ? `<div style="overflow-x:auto"><table class="itbl">${head}${ch.map(row).join('')}</table></div>` : ''}
       <details class="all"><summary>Lihat semua ${list.length} barang</summary><div style="overflow-x:auto"><table class="itbl">${head}${list.map(row).join('')}</table></div></details></div>`;
   }
@@ -482,7 +482,9 @@
         r.inItems[room] = (res.items || []).map(i => ({ id: uid(), name: i.name, qty: i.qty, cond: i.cond, note: i.note || '', src: 'ai', flag: i.small ? 'small' : '' }));
       } else {
         const list = r.outItems[room];
-        (res.items || []).forEach(x => { const it = list.find(i => i.id === x.id); if (it) { it.qty = x.qty; it.cond = x.cond; it.note = x.seen ? (x.note || '') : 'Not visible in photo'; it.unchecked = false; } });
+        (res.items || []).forEach(x => { const it = list.find(i => i.id === x.id); if (!it) return; it.unchecked = false;
+          it.cond = x.cond; it.note = x.seen ? (x.note || '') : 'Not visible in photo';
+          if (x.seen && x.qty < it.inQty) { it.cond = 'Damaged'; it.note = `${it.inQty - x.qty} missing${x.note ? '; ' + x.note : ''}`; } });
         list.forEach(it => { if (it.unchecked) { it.unchecked = false; it.note = 'Not visible in photo'; } });
         (res.extra || []).forEach(e => list.push({ id: uid(), name: e.name, inQty: 0, inCond: 'Good', inNote: '', qty: parseInt(e.qty, 10) || 1, cond: e.cond || 'Good', note: e.note || 'Not on check-in list', unchecked: false, touched: false }));
       }
@@ -566,7 +568,7 @@
     }).join('') : '<p class="note">No upcoming check-outs.</p>';
     const closed = S.records.filter(r => r.status === 'closed').sort((a, b) => (b.outApprovedAt || 0) - (a.outApprovedAt || 0));
     const hist = closed.length ? `<div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Changes</th><th></th></tr>
-      ${closed.map(r => { const c = changes(r).filter(x => x.res.k !== 'wr' && x.res.k !== 'gy').length; return `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td>${esc(r.tenant || '—')}</td><td class="num">${fmt(r.checkIn)}</td><td class="num">${fmt(r.checkOut)}</td><td>${c ? chip('am', `${c} to settle`) : chip('ok', 'None')}</td>
+      ${closed.map(r => { const c = changes(r).length; return `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td>${esc(r.tenant || '—')}</td><td class="num">${fmt(r.checkIn)}</td><td class="num">${fmt(r.checkOut)}</td><td>${c ? chip('am', `${c} change${c === 1 ? '' : 's'}`) : chip('ok', 'None')}</td>
       <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Check-in PDF</button><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="out">Check-out PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`; }).join('')}
       </table></div>` : '<p class="note">Completed check-outs will appear here.</p>';
     app.innerHTML = `<div class="page">
@@ -619,21 +621,22 @@
     const list = (r.outItems || {})[roomId]; if (!list) return;
     list.forEach(it => { it.unchecked = false; if (it.note === 'No check-out photo') it.note = ''; });
     const tweak = (room, name, fn) => { if (room !== roomId) return; const it = list.find(x => x.name === name); if (it) fn(it); };
-    tweak('bed1', 'Pillows with cover', it => { it.qty = Math.max(0, it.inQty - 1); });
+    tweak('bed1', 'Pillows with cover', it => { it.cond = 'Damaged'; it.note = '1 pillow cover torn'; });
     tweak('bed1', 'Bed runner', it => { it.cond = 'Damaged'; it.note = 'Stain'; });
     tweak('bed2', 'White towels', it => { it.cond = 'Worn'; });
   }
+  // Check-out result = the condition chosen at check-out (Good / Worn / Damaged). No "missing" status.
   function result(it) {
     if (it.unchecked && !it.touched) return { k: 'gy', t: 'Not photographed' };
-    if (it.qty < it.inQty) return { k: 'am', t: `Missing ${it.inQty - it.qty}` };
-    if (RANK[it.cond] > RANK[it.inCond]) return it.cond === 'Damaged' ? { k: 'rd', t: 'Damaged' } : { k: 'wr', t: 'Normal wear' };
-    if (it.qty > it.inQty) return { k: '', t: 'More than check-in' };
-    return { k: 'ok', t: 'Same' };
+    if (RANK[it.cond] > RANK[it.inCond]) return it.cond === 'Damaged' ? { k: 'rd', t: 'Damaged' } : { k: 'wr', t: 'Worn' };
+    return { k: 'ok', t: it.cond === 'Good' ? 'Good' : it.cond + ' (as at check-in)' };
   }
+  const isChange = res => res.k === 'wr' || res.k === 'rd';
+  const fmtIDR = n => (n || n === 0) && n !== '' ? 'Rp ' + Number(n).toLocaleString('id-ID') : '';
   function changes(r) {
     const list = [];
     Object.keys(r.outItems || {}).forEach(room => r.outItems[room].forEach(it => {
-      const res = result(it); if (res.t !== 'Same' && res.t !== 'Not photographed') list.push({ room, it, res });
+      const res = result(it); if (isChange(res)) list.push({ room, it, res });
     }));
     return list;
   }
@@ -711,17 +714,20 @@
   function viewCheckOut(r) {
     const v = villa(r.villaId);
     const edit = r.status === 'checkout_pending';
+    const costEdit = r.status === 'checkout_pending' || r.status === 'closed';
     const ch = changes(r);
     const unchecked = Object.keys(r.outItems || {}).filter(k => !(r.outPhotos[k] || []).length).map(k => roomName(k, 'en'));
     const nItems = Object.values(r.outItems || {}).reduce((a, l) => a + l.length, 0);
     const nPh = count(r.outPhotos);
-    const qtyCell = (k, it) => edit ? `<input class="q" type="number" min="0" data-ok="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Check-out quantity">` : it.qty;
-    const condCell = (k, it) => edit ? `<select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Check-out condition">${CONDS.map(c => `<option${c === it.cond ? ' selected' : ''}>${c}</option>`).join('')}</select>` : it.cond;
+    const condCell = (k, it) => edit ? `<select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Check-out result">${CONDS.map(c => `<option${c === it.cond ? ' selected' : ''}>${c}</option>`).join('')}</select>` : it.cond;
     const noteCell = (k, it) => edit ? `<input data-ok="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note">` : `<span class="note">${esc(it.note)}</span>`;
-    const chRows = ch.length ? ch.map(({ room, it, res }) => `<tr class="chg"><td><b>${esc(it.name)}</b></td><td>${esc(roomName(room, 'en'))}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${qtyCell(room, it)}</td><td>${condCell(room, it)}</td><td>${chip(res.k, res.t)}</td><td>${noteCell(room, it)}</td></tr>`).join('')
-      : `<tr><td colspan="7" class="note">No changes. Everything is the same as at check-in.</td></tr>`;
+    const costCell = (k, it) => costEdit ? `<input class="cost" inputmode="numeric" data-ok="cost" data-room="${k}" data-iid="${it.id}" value="${it.cost ? Number(it.cost).toLocaleString('id-ID') : ''}" placeholder="Optional" aria-label="Cost in rupiah">` : fmtIDR(it.cost);
+    const total = ch.reduce((a, x) => a + (Number(x.it.cost) || 0), 0);
+    const chRows = ch.length ? ch.map(({ room, it, res }) => `<tr class="chg"><td><b>${esc(it.name)}</b></td><td>${esc(roomName(room, 'en'))}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(room, it)}</td><td>${noteCell(room, it)}</td><td>${costCell(room, it)}</td></tr>`).join('')
+      : `<tr><td colspan="6" class="note">No changes. Everything is in the same condition as at check-in.</td></tr>`;
     const blocks = Object.keys(r.outItems || {}).map(k => {
       const list = r.outItems[k];
+      const nCh = list.filter(it => isChange(result(it))).length;
       return `<div class="rblock">
         <div style="display:flex;flex-direction:column;gap:8px">
           <span class="note">Check-in</span><div class="ph">${photoCol(r.inPhotos[k], 'Check-in', 2)}</div>
@@ -730,23 +736,22 @@
         <div style="min-width:0">
           <h3>${esc(roomName(k, 'en'))} ${chip('', `${list.length} items`)}</h3>
           <details class="all"><summary>Show all ${list.length} items</summary>
-          <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Check-in</th><th>Qty</th><th>Condition</th><th>Result</th></tr>
-          ${list.map(it => { const res = result(it); return `<tr class="${res.t !== 'Same' ? 'chg' : ''}"><td>${esc(it.name)}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${qtyCell(k, it)}</td><td>${condCell(k, it)}</td><td>${chip(res.k, res.t)}</td></tr>`; }).join('')}
+          <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Check-in</th><th>Result</th></tr>
+          ${list.map(it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td>${esc(it.name)}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(k, it)}</td></tr>`; }).join('')}
           </table></div></details>
-          <p class="note">${(() => { const c = list.filter(it => result(it).t !== 'Same').length; return c ? `${c} change${c === 1 ? '' : 's'} in this room` : 'No changes in this room'; })()}</p>
+          <p class="note">${nCh ? `${nCh} change${nCh === 1 ? '' : 's'} in this room` : 'No changes in this room'}</p>
         </div>
       </div>`;
     }).join('');
-    const settle = ch.filter(x => x.res.k === 'am' || x.res.k === 'rd').length;
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-out review' : 'Check-out · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <p class="sub">Agreement <b>${esc(r.agreement || '—')}</b> · Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)} · Check-out inventory ${fmt(r.outInvDate)}</p>
-      ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the check-in list (${nItems} items) and staff checked the result.</b> ${ch.length} change${ch.length === 1 ? '' : 's'}. Correct if needed, then approve. Items already damaged at check-in are not counted again.</div>` : ''}
+      ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the check-in list (${nItems} items) and staff checked the result.</b> ${ch.length} change${ch.length === 1 ? '' : 's'}. Correct if needed, then approve. Items already worn or damaged at check-in are not counted again.</div>` : ''}
       ${unchecked.length ? `<div class="banner am">No check-out photos for: ${esc(unchecked.join(', '))}. Those items are marked "Not photographed".</div>` : ''}
       <div class="card"><h3>Changes since check-in</h3>
-        <div class="tbl"><table class="vt itbl"><tr><th>Item</th><th>Room</th><th>Check-in</th><th>Qty</th><th>Condition</th><th>Result</th><th>Note</th></tr>${chRows}</table></div>
-        <p class="note">${settle ? `${settle} item${settle === 1 ? '' : 's'} to settle with the tenant (missing or damaged). Normal wear is not charged.` : 'Nothing to settle with the tenant.'}</p>
+        <div class="tbl"><table class="vt itbl"><tr><th>Item</th><th>Room</th><th>Check-in</th><th>Result</th><th>Note</th><th>Cost (IDR)</th></tr>${chRows}</table></div>
+        ${ch.length ? `<p class="note"><b>Total cost: <span id="costTotal">${total ? fmtIDR(total) : '—'}</span></b>. Cost is optional: type it here, or leave it blank and write it on the printed PDF.${!edit ? ' You can still change it after approval; generate the PDF again afterwards.' : ''}</p>` : ''}
       </div>
       ${blocks}
       <div class="actions">
@@ -868,19 +873,19 @@
         const ch = changes(r);
         roomTitle('Changes since check-in', `${ch.length} found`);
         if (ch.length) {
-          const charge = res => res.k === 'am' || res.k === 'rd';
-          table(['Item', 'Room', 'Check-in', 'Check-out', 'Result', 'Cost (IDR)'],
-            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, `${it.qty} ${it.cond}`, res.t + (it.note ? ` (${it.note})` : ''), charge(res) ? '' : 'n/a']),
+          const total = ch.reduce((a, x) => a + (Number(x.it.cost) || 0), 0);
+          table(['Item', 'Room', 'Check-in', 'Result', 'Note', 'Cost (IDR)'],
+            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, res.t, it.note || '', it.cost ? Number(it.cost).toLocaleString('id-ID') : '']),
             { 5: { cellWidth: 30, halign: 'right', minCellHeight: 8 } },
-            ['', '', '', '', 'Total', '']);
+            ['', '', '', '', 'Total', total ? total.toLocaleString('id-ID') : '']);
           doc.setFontSize(8); doc.setTextColor(...MUTED);
-          doc.text('Cost of repair or compensation, to be filled in by the owner or agent. Normal wear is not charged.', M, y - 4); doc.setTextColor(...DARK); y += 2;
+          doc.text('Cost of repair or compensation in rupiah. If blank, to be filled in by the owner or agent.', M, y - 4); doc.setTextColor(...DARK); y += 2;
         }
-        else { doc.setFontSize(10); doc.text('No changes. Everything is the same as at check-in.', M, y); y += 10; }
+        else { doc.setFontSize(10); doc.text('No changes. Everything is in the same condition as at check-in.', M, y); y += 10; }
         for (const k of Object.keys(r.outItems || {})) {
           roomTitle(roomName(k, 'en'), `${r.outItems[k].length} items`);
           await photoPair(r.inPhotos[k] || [], r.outPhotos[k] || []);
-          table(['Item', 'Check-in', 'Check-out', 'Result'], r.outItems[k].map(it => [it.name, `${it.inQty} ${it.inCond}`, `${it.qty} ${it.cond}`, result(it).t]), { 1: { cellWidth: 30 }, 2: { cellWidth: 30 }, 3: { cellWidth: 34 } });
+          table(['Item', 'Check-in', 'Result'], r.outItems[k].map(it => [it.name, `${it.inQty} ${it.inCond}`, result(it).t]), { 1: { cellWidth: 34 }, 2: { cellWidth: 44 } });
         }
       }
       // tenant acknowledgement + signatures
@@ -948,14 +953,25 @@
     save();
   }
   function outEdit(t, rerender) {
-    const r = rec(location.hash.split('/')[3]); if (!r || (r.status !== 'checkout_pending' && r.status !== 'out_draft')) return;
-    const it = findItem(r.outItems[t.dataset.room], t.dataset.iid); if (!it) return;
+    const r = rec(location.hash.split('/')[3]); if (!r) return;
     const k = t.dataset.ok;
-    it[k] = k === 'qty' ? Math.max(0, parseInt(t.value, 10) || 0) : t.value;
-    if (k !== 'note') { it.touched = true; if (it.unchecked && it.note === 'No check-out photo') it.note = ''; }
+    const open = r.status === 'checkout_pending' || r.status === 'out_draft';
+    if (!open && !(k === 'cost' && r.status === 'closed')) return;
+    const it = findItem(r.outItems[t.dataset.room], t.dataset.iid); if (!it) return;
+    if (k === 'cost') { const d = String(t.value).replace(/\D/g, ''); it.cost = d ? parseInt(d, 10) : ''; }
+    else it[k] = k === 'qty' ? Math.max(0, parseInt(t.value, 10) || 0) : t.value;
+    if (k === 'cond') { it.touched = true; if (it.note === 'No check-out photo') it.note = ''; }
     save();
+    if (k === 'cost') {
+      if (r.status === 'closed') pushRecord(r).catch(() => {});
+      t.value = it.cost ? Number(it.cost).toLocaleString('id-ID') : '';
+      const tot = changes(r).reduce((a, x) => a + (Number(x.it.cost) || 0), 0);
+      const el = document.getElementById('costTotal'); if (el) el.textContent = tot ? fmtIDR(tot) : '—';
+      return;
+    }
     if (rerender) render(true);
   }
+
 
   app.addEventListener('click', e => {
     const img = e.target.closest('img.zoom');

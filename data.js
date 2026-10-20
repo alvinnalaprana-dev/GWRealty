@@ -52,3 +52,19 @@ window.GW_SMALL = ['Forks', 'Table knives', 'Teaspoons', 'Wine glasses', 'Tall g
 
 /* Items AI typically cannot see in photos (hidden under other things) */
 window.GW_HIDDEN = ['Mattress protector'];
+
+/* Demo: keep 10 items per room so the demo is quick to walk through.
+   The full Villa Madya 1 list stays above for reference. */
+(function () {
+  const KEEP = {
+    bed1: ['Bed frame', 'Mattress', 'White bed sheet', 'White duvet', 'Bed runner', 'Pillows with cover', 'Bedside table', 'Reading lamp', 'LG TV with remote', 'Towels'],
+    bed2: ['Bed frame', 'Mattress', 'White duvet', 'Pillows with cover', 'Bedside table', 'Reading lamp', 'Painting (Balinese dancer)', 'Wardrobe', 'Grey curtains', 'White towels'],
+    bed3: ['Bed frame', 'Mattress', 'White duvet', 'Pillows with cover', 'Bedside table', 'Reading lamp', 'Wardrobe', 'Wooden decoration', 'Grey curtains', 'White towels'],
+    living: ['Sofa set (1 long + 2 single)', 'Sofa cushions with cover', 'Coffee table', 'Rattan carpet', 'Ashtray', 'Tissue box', 'Door mat', 'Pool towels', 'Painting', 'Standing fan'],
+    kitchen: ['Dining table', 'Dining chairs', 'Refrigerator', 'Microwave', 'Electric kettle', 'Gas tank 3 kg', 'Frying pan', 'Dinner plates', 'Wine glasses', 'Mugs']
+  };
+  window.GW_CATALOG_FULL = window.GW_CATALOG;
+  const out = {};
+  Object.keys(window.GW_CATALOG).forEach(room => { out[room] = window.GW_CATALOG[room].filter(([n]) => KEEP[room].includes(n)); });
+  window.GW_CATALOG = out;
+})();
