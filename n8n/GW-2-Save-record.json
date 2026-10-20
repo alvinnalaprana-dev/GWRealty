@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 2 Save record + photos",
   "nodes": [
     {
-      "id": "99a997d4-5071-44ae-b782-82006f37ff32",
+      "id": "b4fa1bf9-a968-4611-a86c-deb808c98427",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "81cf3229-410e-47ac-8758-45278d8547d0",
+      "webhookId": "1a4e893a-d1ba-4c2a-8b61-ad2c7d8fd303",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-record",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "1545a26a-2dcb-4f8b-b6f3-168be1d643dc",
+      "id": "7c42793c-6595-4d95-84e4-a6e058441eae",
       "name": "Photos to files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "fe8f28cd-c7c8-43f8-92b1-c52cb442e175",
+      "id": "8fe9f1f0-4cec-400c-b94a-1f9f1c8a5616",
       "name": "Has photos?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -59,7 +59,7 @@
           },
           "conditions": [
             {
-              "id": "444a8e93-16d3-457a-9315-2252e44f9483",
+              "id": "6c5c731d-5cd3-435c-9734-60287b0f76a3",
               "leftValue": "={{ $json.none }}",
               "rightValue": "",
               "operator": {
@@ -75,7 +75,7 @@
       }
     },
     {
-      "id": "d89b77d4-3db5-4486-b60a-22f55a747105",
+      "id": "86582c6e-9ec8-4703-9f23-c964e7ccd2f8",
       "name": "Upload photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -106,7 +106,7 @@
       }
     },
     {
-      "id": "e36d1dcc-1661-439c-809f-ea1f8e72d772",
+      "id": "b71c9203-6c55-464c-a0c8-b1a382e445d7",
       "name": "Build row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -119,7 +119,7 @@
       }
     },
     {
-      "id": "ea7b9522-de6b-4473-8ab4-983e78103c8a",
+      "id": "b2d3d6a9-b074-4b8f-a5d7-95d75a787198",
       "name": "Upsert record",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -270,7 +270,7 @@
       }
     },
     {
-      "id": "66d27bf3-fe14-4941-8be3-4d5ba6ecd987",
+      "id": "f147ab57-95fc-4e79-83cd-520622b8f5a4",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

@@ -766,16 +766,19 @@
       const W = 210, M = 14, BOTTOM = 282;
       const repNo = `${r.agreement || 'GWR-' + r.id.slice(0, 6).toUpperCase()}-${phase === 'in' ? 'IN' : 'OUT'}`;
       const title = phase === 'in' ? 'Check-in Report' : 'Check-out Report';
-      const GREEN = [14, 124, 102], DARK = [21, 32, 28], MUTED = [91, 107, 101];
+      const RED = [166, 16, 17], GREEN = RED, DARK = [33, 28, 28], MUTED = [110, 100, 100];
       let y;
-      const header = () => {
-        doc.setFillColor(...DARK); doc.rect(0, 0, W, 24, 'F');
-        doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('GW Realty', M, 11);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`Villa Inventory · ${title}`, M, 17.5);
-        doc.text(repNo, W - M, 11, { align: 'right' }); doc.text(`Generated ${fmt(iso(new Date()))}`, W - M, 17.5, { align: 'right' });
+      const drawHeader = () => {
+        const L = window.GW_LOGO;
+        if (L) { const h = 17, w = h * L.w / L.h; doc.addImage(L.data, 'PNG', M, 4, w, h); }
+        else { doc.setTextColor(...RED); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('GW Realty', M, 14); }
+        doc.setTextColor(...DARK); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text(title.toUpperCase(), W - M, 10, { align: 'right' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED);
+        doc.text(`Villa Inventory · ${repNo}`, W - M, 15.5, { align: 'right' }); doc.text(`Generated ${fmt(iso(new Date()))}`, W - M, 20.5, { align: 'right' });
+        doc.setDrawColor(...RED); doc.setLineWidth(0.6); doc.line(M, 24.5, W - M, 24.5); doc.setLineWidth(0.2);
         doc.setTextColor(...DARK);
-        y = 32;
       };
+      const header = () => { drawHeader(); y = 32; };
       const need = h => { if (y + h > BOTTOM) { doc.addPage(); header(); } };
       header();
       // meta
@@ -835,7 +838,7 @@
       };
       const roomTitle = (name, extra) => {
         need(14);
-        doc.setFillColor(226, 242, 238); doc.rect(M, y, W - 2 * M, 8, 'F');
+        doc.setFillColor(250, 236, 236); doc.rect(M, y, W - 2 * M, 8, 'F');
         doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(name, M + 3, y + 5.5);
         if (extra) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(extra, W - M - 3, y + 5.5, { align: 'right' }); doc.setTextColor(...DARK); }
         y += 12;
@@ -886,9 +889,7 @@
       for (let i = 1; i <= pages; i++) {
         doc.setPage(i);
         if (i > 1) {
-          doc.setFillColor(...DARK); doc.rect(0, 0, W, 24, 'F');
-          doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('GW Realty', M, 11);
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`Villa Inventory · ${title}`, M, 17.5); doc.text(repNo, W - M, 11, { align: 'right' });
+          doc.setFillColor(255, 255, 255); doc.rect(0, 0, W, 26, 'F'); drawHeader();
         }
         doc.setFontSize(8); doc.setTextColor(...MUTED);
         doc.text(`${v.name} · ${title} · GW Realty`, M, 291);
