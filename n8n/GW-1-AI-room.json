@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 1 AI per room",
   "nodes": [
     {
-      "id": "1cd96ccc-8cb1-4c2c-98d0-f14523b889eb",
+      "id": "84079daf-f7eb-4fe5-a5de-e9ac58389897",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "1a3de692-cb44-42a6-953e-d0458feb897e",
+      "webhookId": "a4246a9b-75da-4ebe-87fa-48a6c407a84f",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-ai-room",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "c9bbda8f-3ea2-42dc-8f89-097079c2d9a8",
+      "id": "3a61b05d-5318-491f-b52f-65b28cd6f045",
       "name": "Prepare request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "443da196-7606-48d9-b17f-efc12c536144",
+      "id": "440ad39f-d980-4bb1-9ee2-e2d5f6bc0252",
       "name": "Claude API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -79,7 +79,7 @@
       }
     },
     {
-      "id": "65999a14-cfde-4a88-baf0-06a81ea1f04b",
+      "id": "2e4f0785-e14d-4c94-8c03-091de9290385",
       "name": "Parse reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -92,7 +92,7 @@
       }
     },
     {
-      "id": "7feb295b-5f09-4a4c-8a9f-90ebe9912ff6",
+      "id": "6e87f1a9-f768-46fe-af48-7f248f1a7dc3",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

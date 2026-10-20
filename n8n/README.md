@@ -1,6 +1,6 @@
 # GW Realty Inventory — n8n workflows
 
-Seven workflows for your own n8n server. The web page talks to them through webhooks; n8n talks to Claude (AI) and Google Drive/Sheets/Gmail.
+Six workflows for your own n8n server. The web page talks to them through webhooks; n8n talks to Claude (AI) and Google Drive/Sheets/Gmail.
 
 | File | Webhook | What it does |
 |---|---|---|
@@ -8,11 +8,12 @@ Seven workflows for your own n8n server. The web page talks to them through webh
 | GW-2-Save-record.json | POST `gw-save-record` | Uploads new photos to Drive `Photos`, upserts the record row in the Records sheet |
 | GW-3-List-records.json | GET `gw-records` | Returns all records (and the `_settings` row with villas and users) |
 | GW-4-Photo.json | GET `gw-photo?id=` | Streams one photo from Drive, so the manager's device can see staff photos |
-| GW-5-Agreement codes.json | GET `gw-agreements` | Reads the manager's agreement sheet; fills tenant and dates when a code is picked |
 | GW-6-Save-PDF.json | POST `gw-save-pdf` | Saves each generated PDF to Drive `Reports (PDF)` |
 | GW-7-Reminder.json | daily 08:00 WITA | Emails the manager about check-outs 7 days away |
 
 ## Setup (about 20 minutes)
+
+Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 not to link their agreement sheet).
 
 1. **Import** each JSON file: n8n → Workflows → Import from File.
 2. **Create five credentials** in n8n (Credentials → Add):
@@ -21,7 +22,7 @@ Seven workflows for your own n8n server. The web page talks to them through webh
    - **Google Sheets account**, **Google Drive account**, **Gmail account** (OAuth2). For testing, sign in with the account that owns the `GW Realty Inventory (TEST)` folder. For live use, sign in with GW Realty's Google account.
 3. **Open each workflow** and pick the credential on every node with a warning triangle.
 4. **GW-7 Reminder:** change `manager@example.com` on the *Email manager* node to the manager's email.
-5. **Activate** all seven workflows (toggle top right).
+5. **Activate** all six workflows (toggle top right).
 6. **Connect the page:** in `config.js` set
    ```js
    window.GW_API = { base: 'https://YOUR-N8N-DOMAIN/webhook', key: 'THE SAME RANDOM STRING AS STEP 2' };
@@ -32,9 +33,8 @@ Seven workflows for your own n8n server. The web page talks to them through webh
 
 - Folder `GW Realty Inventory (TEST)` with `Photos` and `Reports (PDF)`
 - Sheet `GW Inventory Records (TEST)` (headers in row 1; do not rename them)
-- Sheet `GW Agreements (TEST)` with three sample agreement codes
 
-The IDs are already filled into the workflows. For live use, replace them with GW Realty's own folder and sheet IDs (nodes *Upload photo*, *Upload PDF*, *Upsert record*, *Read records*, *Read agreements*).
+The IDs are already filled into the workflows. For live use, replace them with GW Realty's own folder and sheet IDs (nodes *Upload photo*, *Upload PDF*, *Upsert record*, *Read records*).
 
 ## Switching the AI model
 

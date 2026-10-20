@@ -42,8 +42,6 @@
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
       v: 4, role: null, user: null,
-      /* Demo copy of the manager's agreement Google Sheet (live: read from the sheet) */
-      agreements: ['GWR-AG-2026-031', 'GWR-AG-2026-032', 'GWR-AG-2026-033', 'GWR-AG-2026-034', 'GWR-AG-2026-035'],
       users: [
         { id: 'u-mgr', name: 'Manager', email: 'manager@gwrealtyglobal.com', role: 'mgr' },
         { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff' }
@@ -112,7 +110,7 @@
   }
   let lastPull = 0, pulling = false;
   async function pullAll(force) {
-    if (!LIVE || pulling || (!force && Date.now() - lastPull < 15000)) return false;
+    if (!LIVE || pulling || (!force && Date.now() - lastPull < 5000)) return false;
     pulling = true;
     try {
       const res = await api('gw-records');
@@ -129,16 +127,6 @@
     } catch (e) { toast('Server not reachable. Showing data saved on this device.'); lastPull = Date.now(); return false; }
     finally { pulling = false; }
   }
-  async function loadAgreements() {
-    if (!LIVE || S.agreementsAt && Date.now() - S.agreementsAt < 60000) return false;
-    try {
-      const res = await api('gw-agreements');
-      S.agreementData = (res.agreements || []);
-      S.agreements = S.agreementData.map(a => a.code);
-      S.agreementsAt = Date.now(); save(); return true;
-    } catch (e) { toast('Could not read the agreement sheet.'); return false; }
-  }
-
   /* ---------- photos (IndexedDB + memory cache) ---------- */
   const PC = new Map();
   const IDB = {
@@ -271,7 +259,7 @@
     renderBar();
     if (p[0] === 'staff' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'staff') { viewStaffHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'staff') render(true); }); }
-    else if (p[0] === 'mgr' && p[1] === 'rec') { viewRecord(p[2]); loadAgreements().then(ch => { if (ch && location.hash.includes('/rec/' + p[2])) render(true); }); }
+    else if (p[0] === 'mgr' && p[1] === 'rec') viewRecord(p[2]);
     else if (p[0] === 'mgr' && p[1] === 'new') viewNew();
     else if (p[0] === 'mgr' && p[1] === 'team') viewTeam();
     else if (p[0] === 'mgr') { viewMgrHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'mgr') render(true); }); }
@@ -690,9 +678,7 @@
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <div class="card"><div class="form">
         <div class="fld"><label for="f-villa">Villa</label><input id="f-villa" value="${esc(v.name)}" readonly></div>
-        <div class="fld"><label for="f-ag">Agreement code</label>${edit
-          ? `<select id="f-ag" data-f="agreement"><option value="">Choose from agreement sheet…</option>${S.agreements.filter(c => c === r.agreement || !S.records.some(x => x.agreement === c && x.id !== r.id)).map(c => `<option${c === r.agreement ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`
-          : `<input id="f-ag" value="${esc(r.agreement || '—')}" readonly>`}</div>
+        <div class="fld"><label for="f-ag">Agreement code</label><input id="f-ag" data-f="agreement" value="${esc(r.agreement)}" placeholder="e.g. GWR-AG-2026-031" autocomplete="off" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-tenant">Tenant name <span class="opt">optional</span></label><input id="f-tenant" data-f="tenant" value="${esc(r.tenant)}" placeholder="Tenant name" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-phone">Phone <span class="opt">optional</span></label><input id="f-phone" data-f="phone" value="${esc(r.phone)}" placeholder="+62…" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-email">Email <span class="opt">optional</span></label><input id="f-email" type="email" data-f="email" value="${esc(r.email)}" placeholder="tenant@email.com" ${edit ? '' : 'readonly'}></div>
@@ -702,7 +688,7 @@
         <div class="fld"><label for="f-in">Check-in date</label><input id="f-in" type="date" data-f="checkIn" value="${esc(r.checkIn)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>
       </div></div>
-      ${edit ? `<p class="note">Agreement codes come from the manager's agreement Google Sheet. A code already used on another record is hidden.</p>` : ''}
+      ${edit ? `<p class="note">Type the agreement code exactly as it is on the signed agreement.</p>` : ''}
       ${edit ? `<div class="banner ai"><b>${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'}, listed by AI from ${nPh} photo${nPh === 1 ? '' : 's'} and checked by staff.</b> Correct anything that is wrong, then approve. Items marked <span class="warnico">⚠</span> are small items.</div>` : ''}
       ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}.</div>` : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
@@ -928,11 +914,7 @@
     if (t.dataset.f) {
       const r = rec(location.hash.split('/')[3]); if (!r) return;
       r[t.dataset.f] = t.value; save();
-      if (t.dataset.f === 'agreement' && S.agreementData) {
-        const a = S.agreementData.find(x => x.code === t.value);
-        const iso10 = v => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? '' : iso(d); };
-        if (a) { let ch = false; if (!r.tenant && a.tenant) { r.tenant = a.tenant; ch = true; } if (!r.checkIn && iso10(a.checkIn)) { r.checkIn = iso10(a.checkIn); ch = true; } if (!r.checkOut && iso10(a.checkOut)) { r.checkOut = iso10(a.checkOut); ch = true; } if (ch) { save(); render(true); toast('Filled in from the agreement sheet.'); } }
-      }
+      if (t.dataset.f === 'agreement') { r.agreement = t.value.trim().toUpperCase(); t.value = r.agreement; save(); }
     }
   });
   app.addEventListener('input', e => {
@@ -1007,7 +989,8 @@
     }
     else if (act === 'approveIn') {
       const r = rec(b.dataset.r); const err = document.getElementById('apErr'); const probs = [];
-      if (!r.agreement) probs.push('Choose the agreement code.');
+      if (!r.agreement) probs.push('Add the agreement code.');
+      else if (S.records.some(x => x.id !== r.id && x.agreement === r.agreement && x.status !== 'closed')) probs.push(`Agreement ${r.agreement} is already used on another open lease. Check the code.`);
       if (!r.checkIn) probs.push('Add the check-in date.');
       if (!r.checkOut) probs.push('Add the check-out date.');
       if (r.checkIn && r.checkOut && r.checkOut <= r.checkIn) probs.push('The check-out date must be after the check-in date.');

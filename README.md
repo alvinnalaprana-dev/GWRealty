@@ -8,7 +8,7 @@ A clickable demo of the villa inventory system for GW Realty, built by Kriyator.
 
 1. **Inventory (staff, phone)** — the inventory date can differ from the tenant's check-in date. Staff photograph each room; as soon as a room has a usable photo, AI lists the items for that room (simulated). Staff check and edit the list, add items manually, and add rooms (quick buttons for Miscellaneous, Terrace, Bathroom, Pool area, Garden).
 2. **Dark photos** — brightness is checked on the phone the moment a photo is added. Dark photos are flagged red, ignored by the AI, left out of the PDF, and must be removed or retaken before sending.
-3. **Manager review** — the manager only edits and approves (no adding or deleting items). Picks the agreement code (from the manager's agreement Google Sheet; demo list), optional tenant details, inventory, check-in and check-out dates.
+3. **Manager review** — the manager only edits and approves (no adding or deleting items). Types the agreement code, optional tenant details, inventory, check-in and check-out dates.
 4. **PDF** — agreement code in the header and file name; inventory date shown when it differs from the check-in date; tenant acknowledgement; signature lines for Owner / Villa / Listing (Owner's Representative) on the left and Tenant on the right. Printed and signed on paper.
 5. **Reminder** — email to the manager 7 days before check-out.
 6. **Check-out (staff)** — the check-in list is pre-filled; per room, AI compares the new photos and flags changes; staff correct; manager approves; check-out PDF shows check-in and check-out photos side by side.
@@ -18,7 +18,7 @@ Staff screens are in Indonesian; manager screens and PDFs are in English.
 
 ## Live mode (n8n)
 
-Set `base` and `key` in `config.js` to connect to the n8n workflows in `n8n/` (setup steps in `n8n/README.md`). The badge shows TEST instead of DEMO; AI is real (Claude Haiku 5.5), records and photos sync across devices through Google Sheets and Drive, PDFs are saved to Drive, and agreement codes come from the agreement sheet.
+Set `base` and `key` in `config.js` to connect to the n8n workflows in `n8n/` (setup steps in `n8n/README.md`). The badge shows TEST instead of DEMO; AI is real (Claude Haiku 5.5), records and photos sync across devices through Google Sheets and Drive, PDFs are saved to Drive.
 
 ## Demo limits (when config.js is empty)
 
