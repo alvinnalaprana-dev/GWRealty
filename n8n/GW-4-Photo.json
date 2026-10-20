@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 4 Photo",
   "nodes": [
     {
-      "id": "babb6211-922d-4c75-b7c0-17f5e352cb47",
+      "id": "f4a28050-f4d4-4558-9fab-b853854dee6a",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "671b196e-4405-489e-8b11-ec2aef9052e2",
+      "webhookId": "64b25c95-a8a8-4e41-8d4b-579eb91a41af",
       "parameters": {
         "httpMethod": "GET",
         "path": "gw-photo",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "7f9250d2-e2c2-45dd-9355-d7646f17d8fc",
+      "id": "687c778b-b42a-4080-b2d1-a27dc27f1043",
       "name": "Download photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -54,7 +54,7 @@
       }
     },
     {
-      "id": "fe0b3127-db7e-4128-bac5-ceddeb61dcd3",
+      "id": "5ea69028-480e-42ce-836a-6bb98fa66800",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

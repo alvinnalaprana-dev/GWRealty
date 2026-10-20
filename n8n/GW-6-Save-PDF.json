@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 6 Save PDF",
   "nodes": [
     {
-      "id": "b3726621-7fab-4f88-9e35-21a0be9e3bfd",
+      "id": "b53ae592-dcd6-4d72-b1f9-918998779369",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "b2246f29-91ce-47c1-82cc-c13fee7e0b02",
+      "webhookId": "8e56e73a-b055-4013-8c96-960bb6f21f5f",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-pdf",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "3e872c4a-7664-45e8-9c93-54ec092876e1",
+      "id": "150a376a-370a-46fb-882a-3cd171f21af7",
       "name": "PDF to file",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "98b6209f-1ef5-4ec6-84c5-90f74c02ed91",
+      "id": "a167ffc3-9e7e-4a18-8034-85aceaa78376",
       "name": "Upload PDF",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -60,7 +60,7 @@
         },
         "folderId": {
           "__rl": true,
-          "value": "1kPicX8fy0Mo0kzpAy04oQfB9j-yC1gud",
+          "value": "1xwvPe9PUaU2_wW9lJofF_e3YVR4gb6Vi",
           "mode": "id"
         },
         "options": {}
@@ -73,7 +73,7 @@
       }
     },
     {
-      "id": "4771dad2-d1fa-4f79-addd-2c232de719be",
+      "id": "072e008b-c63a-4895-87d5-314a1991ea01",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 7 Check-out reminder (daily)",
   "nodes": [
     {
-      "id": "dee35a7f-2fe9-4ef3-b486-b2c2e25507cb",
+      "id": "3d7e9629-c9ec-4530-bf72-37df41089140",
       "name": "Every day 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -21,7 +21,7 @@
       }
     },
     {
-      "id": "3b92bd44-4ac6-4f4b-ac6e-64d56c3b1b4b",
+      "id": "66cc7b8d-d984-40f2-bc44-3ac193f491b7",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -32,7 +32,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1FQVjGMDsfclRry2yFBoydGdv5-QhhnDaDzAmPc9A8ac",
+          "value": "1cNxJUgEy1X6dpenaPSc_0vIBuBLTaCrKYDcTRGHeYN8",
           "mode": "id"
         },
         "sheetName": {
@@ -51,7 +51,7 @@
       }
     },
     {
-      "id": "6d16b675-e2fd-49d8-b10a-b622d9997503",
+      "id": "0201a02b-046c-4a4a-aaf0-9ede10c9c562",
       "name": "Due in 7 days",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": "6e3c5312-d327-4a04-8acd-c465c03dccc9",
+      "id": "7f9419e7-2dd0-4f1e-8c03-efaf7dc8eab5",
       "name": "Email manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,

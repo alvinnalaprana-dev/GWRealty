@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 2 Save record + photos",
   "nodes": [
     {
-      "id": "33f660a1-8221-444d-b3dd-870c0477a1a5",
+      "id": "99a997d4-5071-44ae-b782-82006f37ff32",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "072f4865-d6dc-4092-918b-841495ced313",
+      "webhookId": "81cf3229-410e-47ac-8758-45278d8547d0",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-record",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "539e7530-157f-43c1-b312-777eda1244a0",
+      "id": "1545a26a-2dcb-4f8b-b6f3-168be1d643dc",
       "name": "Photos to files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "faff9e62-2457-480f-a7a5-f96c8462b215",
+      "id": "fe8f28cd-c7c8-43f8-92b1-c52cb442e175",
       "name": "Has photos?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -59,7 +59,7 @@
           },
           "conditions": [
             {
-              "id": "856b8a20-e360-4f1a-ac55-bdad72545447",
+              "id": "444a8e93-16d3-457a-9315-2252e44f9483",
               "leftValue": "={{ $json.none }}",
               "rightValue": "",
               "operator": {
@@ -75,7 +75,7 @@
       }
     },
     {
-      "id": "08ad39a3-e7d9-4c96-8c65-2318bedfd6a2",
+      "id": "d89b77d4-3db5-4486-b60a-22f55a747105",
       "name": "Upload photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -93,7 +93,7 @@
         },
         "folderId": {
           "__rl": true,
-          "value": "1sU2RZhoij8tyj9XyYi-f4Cel_RqFjYEw",
+          "value": "14eu2kei0fG9IY7DuBgY6HpRzSpQWMZCf",
           "mode": "id"
         },
         "options": {}
@@ -106,7 +106,7 @@
       }
     },
     {
-      "id": "a0169f0a-9688-470b-9f5b-ef0b609ff03e",
+      "id": "e36d1dcc-1661-439c-809f-ea1f8e72d772",
       "name": "Build row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -119,7 +119,7 @@
       }
     },
     {
-      "id": "d637b5e8-a768-455c-973a-a9e2a534c9c3",
+      "id": "ea7b9522-de6b-4473-8ab4-983e78103c8a",
       "name": "Upsert record",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -131,7 +131,7 @@
         "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
-          "value": "1FQVjGMDsfclRry2yFBoydGdv5-QhhnDaDzAmPc9A8ac",
+          "value": "1cNxJUgEy1X6dpenaPSc_0vIBuBLTaCrKYDcTRGHeYN8",
           "mode": "id"
         },
         "sheetName": {
@@ -270,7 +270,7 @@
       }
     },
     {
-      "id": "90a53f31-8837-4625-a480-458bf473fc04",
+      "id": "66d27bf3-fe14-4941-8be3-4d5ba6ecd987",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

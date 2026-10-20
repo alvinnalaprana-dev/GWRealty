@@ -19,10 +19,7 @@ Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 no
 2. **Create five credentials** in n8n (Credentials → Add):
    - **GW Inventory key** (type *Header Auth*): Name `X-GW-Key`, Value = a long random string. This protects every webhook.
    - **Anthropic API key** (type *Header Auth*): Name `x-api-key`, Value = an API key from console.anthropic.com (prepaid credit, set a spend limit). Not the Claude Pro plan.
-   - **Google Sheets account**, **Google Drive account**, **Gmail account** (OAuth2). For testing, sign in with the account that owns the `GW Realty Inventory (TEST)` folder. For live use:
-     - **Google Drive account → GW Realty's Google account.** Photos and PDFs then belong to GW Realty and use their storage. (In a normal Google Drive, a file uploaded into a shared folder belongs to whoever uploaded it, so uploading with Kriyator's account would put the photos in Kriyator's storage.)
-     - **Google Sheets account → Kriyator's account** (kriyator@kriyator.com). Create a new sheet there with the same header row as the test sheet and share it with GW Realty. Records live in this shared sheet; GW Realty's own agreement sheet is not connected.
-     - **Gmail account →** whichever account should send the reminder emails.
+   - **Google Sheets account**, **Google Drive account**, **Gmail account** (OAuth2): sign in with **Alvin's Google account** (alvin.nalaprana@gmail.com) for all three. Decided with GW Realty on 20 Oct 2026: the system runs on Alvin's Drive; GW Realty gets view access to photos and PDFs only, and their own Google account and data are never connected.
 3. **Open each workflow** and pick the credential on every node with a warning triangle.
 4. **GW-7 Reminder:** change `manager@example.com` on the *Email manager* node to the manager's email.
 5. **Activate** all six workflows (toggle top right).
@@ -32,12 +29,10 @@ Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 no
    ```
    Commit and push; Netlify redeploys. The header badge changes from DEMO to TEST.
 
-## Test locations already created (Google Drive, Alvin's account)
+## Google Drive locations (Alvin's account, already filled into the workflows)
 
-- Folder `GW Realty Inventory (TEST)` with `Photos` and `Reports (PDF)`
-- Sheet `GW Inventory Records (TEST)` (headers in row 1; do not rename them)
-
-The IDs are already filled into the workflows. For live use, replace them with GW Realty's own folder and sheet IDs (nodes *Upload photo*, *Upload PDF*, *Upsert record*, *Read records*).
+- `GW Realty File/Photos` and `GW Realty File/Reports (PDF)`: share the **GW Realty File** folder with GW Realty as **Viewer**. They see photos and PDFs only.
+- `GW Realty System (private)/GW Realty Inventory Records`: the records sheet (header row in row 1; do not rename the headers). Not shared with GW Realty.
 
 ## Switching the AI model
 
