@@ -1,12 +1,15 @@
 /* GW Realty Inventory demo — one light palette, tokens below */
 :root{
-  --ink:#15201C; --body:#3B4A44; --muted:#5B6B65; --line:#D9E0DD; --line2:#C9D2CE;
-  --bg:#F3F5F4; --bg2:#E9EEEC; --card:#FFFFFF; --soft:#F8FAF9;
-  --accent:#0E7C66; --accent-d:#0B6553; --accent-soft:#E2F2EE; --accent-lite:#5FD3B4;
-  --dark:#15201C; --amber:#9A5A08; --amber-soft:#FBEFDC; --red:#B23A2E; --red-soft:#F9E3E0;
-  --wear:#4D50A0; --wear-soft:#E8E8F6; --ai:#5B4BC4; --ai-soft:#ECEAFB;
-  --display:'Bricolage Grotesque','Segoe UI',Arial,sans-serif;
-  --text:'Instrument Sans','Segoe UI',Arial,sans-serif;
+  /* GW Realty palette, matched to gwrealtyglobal.com: brand red #A61011, Montserrat, #F3F3F3 page, #222 text */
+  --ink:#222222; --body:#333333; --muted:#636363; --line:#DCE0E0; --line2:#C9CDCD;
+  --bg:#F3F3F3; --bg2:#E9E9E9; --card:#FFFFFF; --soft:#F8F8F8;
+  --accent:#A61011; --accent-d:#8A0D0E; --accent-soft:#F8E8E8; --accent-lite:#FFFFFF;
+  --dark:#A61011; --dark2:#9B1717;
+  --ok:#2E7D4F; --ok-soft:#E4F2E9;
+  --amber:#9A5A08; --amber-soft:#FBEFDC; --red:#B3261E; --red-soft:#FBE4E2;
+  --wear:#5A5F6B; --wear-soft:#ECEDF0; --ai:#4A5568; --ai-soft:#EDF0F3;
+  --display:'Montserrat','Segoe UI',Arial,sans-serif;
+  --text:'Montserrat','Segoe UI',Arial,sans-serif;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -16,18 +19,18 @@ h1,h2,h3,h4,p{margin:0}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
 a{color:var(--accent)}
-:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+:focus-visible{outline:3px solid rgba(166,16,17,.45);outline-offset:2px}
 
 /* top bar */
-.bar{position:sticky;top:0;z-index:20;background:var(--dark);color:#E6ECE9;padding-inline:16px}
+.bar{position:sticky;top:0;z-index:20;background:var(--dark);color:#fff;padding-inline:16px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .bar-in{max-width:1120px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;height:56px}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:18px;color:#fff;text-decoration:none}
 .brand i{width:26px;height:26px;border-radius:7px;background:var(--accent-lite);display:inline-block;position:relative}
 .brand i::after{content:"";position:absolute;inset:7px 6px 6px 6px;border:2px solid var(--dark);border-top:none;border-radius:0 0 3px 3px}
 .bar-r{display:flex;align-items:center;gap:10px;font-size:13px}
 .demo{font-size:11px;font-weight:600;letter-spacing:.06em;padding:2px 8px;border-radius:999px;background:var(--amber-soft);color:var(--amber)}
-.role{color:#A9B8B2}
-.linkbtn{background:none;border:1px solid #33443D;color:#D7DFD9;border-radius:8px;padding:5px 10px;font-size:13px}
+.role{color:rgba(255,255,255,.85);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.linkbtn{background:none;border:1px solid rgba(255,255,255,.55);color:#fff;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 
 main{padding-inline:16px;padding-block:24px 64px}
 .page{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
@@ -48,7 +51,7 @@ main{padding-inline:16px;padding-block:24px 64px}
 .btn.block{width:100%}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;white-space:nowrap;background:var(--bg2);color:var(--muted)}
-.chip.ok{background:var(--accent-soft);color:var(--accent)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
 .chip.am{background:var(--amber-soft);color:var(--amber)}
 .chip.rd{background:var(--red-soft);color:var(--red)}
 .chip.wr{background:var(--wear-soft);color:var(--wear)}
@@ -84,9 +87,9 @@ main{padding-inline:16px;padding-block:24px 64px}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .th{position:relative;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:var(--bg2)}
 .th img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
-.th .x{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(21,32,28,.75);color:#fff;font-size:14px;line-height:24px;padding:0}
+.th .x{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(34,34,34,.75);color:#fff;font-size:14px;line-height:24px;padding:0}
 .th .old{position:absolute;left:4px;bottom:4px;font-size:10px;font-weight:600;background:var(--amber-soft);color:var(--amber);border-radius:4px;padding:1px 5px}
-.ph-empty{aspect-ratio:1/1;border-radius:8px;background:repeating-linear-gradient(135deg,#D9E0DD 0 7px,#EEF2F0 7px 14px);display:flex;align-items:flex-end;padding:4px}
+.ph-empty{aspect-ratio:1/1;border-radius:8px;background:repeating-linear-gradient(135deg,#DCDCDC 0 7px,#F0F0F0 7px 14px);display:flex;align-items:flex-end;padding:4px}
 .ph-empty span{font-size:10px;background:rgba(255,255,255,.9);border-radius:4px;padding:1px 5px;color:var(--muted)}
 .refstrip{display:flex;gap:6px;overflow-x:auto}
 .refstrip img,.refstrip .ph-empty{width:64px;height:64px;flex:none;border-radius:6px;object-fit:cover}
@@ -102,9 +105,9 @@ td.num{font-variant-numeric:tabular-nums}
 .vt{min-width:720px}
 .grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px;align-items:start}
 .rem{display:flex;flex-direction:column;gap:8px}
-.tg{background:#E6F0FA;border-radius:12px 12px 12px 4px;padding:9px 12px;font-size:13px}
-.tg b{display:block;font-size:12px;color:#1D4A73}
-.tg small{color:#6A7F8F}
+.tg{background:var(--soft);border:1px solid var(--line);border-radius:12px 12px 12px 4px;padding:9px 12px;font-size:13px}
+.tg b{display:block;font-size:12px;color:var(--accent)}
+.tg small{color:var(--muted)}
 
 /* review */
 .form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
@@ -136,7 +139,7 @@ td.num{font-variant-numeric:tabular-nums}
 .pbar i{display:block;height:100%;width:0;background:var(--ai);transition:width .25s}
 
 /* overlay, toast, lightbox */
-.overlay{position:fixed;inset:0;background:rgba(21,32,28,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.overlay{position:fixed;inset:0;background:rgba(34,34,34,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
 .overlay .card{max-width:360px;align-items:center;text-align:center}
 .lb img{max-width:100%;max-height:88vh;border-radius:8px;display:block}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--dark);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;max-width:calc(100% - 32px)}
@@ -220,3 +223,19 @@ details.all[open] summary{margin-bottom:6px}
 .ailist{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px}
 .sugg{display:flex;flex-wrap:wrap;gap:8px}
 .chipbtn{border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600}
+
+/* v4: GW Realty look (gwrealtyglobal.com) */
+.brand img{height:38px;width:auto;display:block}
+.brand span{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.45);padding-left:10px}
+.demo{background:#fff;color:var(--accent)}
+.head h1{font-weight:700;letter-spacing:-.01em}
+.room h3,.card h3,.rblock h3{text-transform:uppercase;letter-spacing:.03em;font-size:14px;font-weight:700}
+.btn{border-radius:6px;font-weight:600;letter-spacing:.02em}
+.btn:hover{background:var(--accent-d)}
+.btn.ghost:hover{background:var(--bg);color:var(--ink)}
+.card,.room,.villa,.rblock,.tbl,.actions{border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+th{color:#fff;background:var(--accent)}
+.src.edited,.src.added{background:var(--ok-soft);color:var(--ok)}
+.chipbtn{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.pick button:hover{border-color:var(--accent);box-shadow:0 2px 10px rgba(166,16,17,.12)}
+.toast{background:#222}

@@ -239,7 +239,7 @@
     const u = curUser();
     const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staf · ${u ? u.name : ''}` : '';
     barEl.innerHTML = `<div class="bar-in">
-      <a class="brand" href="#/"><i aria-hidden="true"></i>${S.role === 'mgr' ? 'GW Inventory' : 'GW Inventaris'}</a>
+      <a class="brand" href="#/"><img src="logo-white.png" alt="GW Realty"><span>${S.role === 'mgr' ? 'Inventory' : 'Inventaris'}</span></a>
       <div class="bar-r"><span class="demo">${LIVE ? 'TEST' : 'DEMO'}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
     </div>`;
   }
@@ -843,8 +843,9 @@
         if (extra) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(extra, W - M - 3, y + 5.5, { align: 'right' }); doc.setTextColor(...DARK); }
         y += 12;
       };
-      const table = (head, body, colStyles) => {
-        doc.autoTable({ startY: y, head: [head], body, theme: 'grid', margin: { left: M, right: M, top: 30 },
+      const table = (head, body, colStyles, foot) => {
+        doc.autoTable({ startY: y, head: [head], body, foot: foot ? [foot] : undefined, showFoot: 'lastPage', theme: 'grid', margin: { left: M, right: M, top: 30 },
+          footStyles: { fillColor: [250, 236, 236], textColor: DARK, fontStyle: 'bold' },
           styles: { fontSize: 9, cellPadding: 1.8, textColor: DARK, lineColor: [217, 224, 221] },
           headStyles: { fillColor: GREEN, textColor: 255 }, columnStyles: colStyles || {},
           didDrawPage: d => { if (d.pageNumber > 1 && d.cursor && d.cursor.y < 32) { /* header drawn below */ } } });
@@ -861,7 +862,15 @@
       } else {
         const ch = changes(r);
         roomTitle('Changes since check-in', `${ch.length} found`);
-        if (ch.length) table(['Item', 'Room', 'Check-in', 'Check-out', 'Result'], ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, `${it.qty} ${it.cond}`, res.t + (it.note ? ` (${it.note})` : '')]));
+        if (ch.length) {
+          const charge = res => res.k === 'am' || res.k === 'rd';
+          table(['Item', 'Room', 'Check-in', 'Check-out', 'Result', 'Cost (IDR)'],
+            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, `${it.qty} ${it.cond}`, res.t + (it.note ? ` (${it.note})` : ''), charge(res) ? '' : 'n/a']),
+            { 5: { cellWidth: 30, halign: 'right', minCellHeight: 8 } },
+            ['', '', '', '', 'Total', '']);
+          doc.setFontSize(8); doc.setTextColor(...MUTED);
+          doc.text('Cost of repair or compensation, to be filled in by the owner or agent. Normal wear is not charged.', M, y - 4); doc.setTextColor(...DARK); y += 2;
+        }
         else { doc.setFontSize(10); doc.text('No changes. Everything is the same as at check-in.', M, y); y += 10; }
         for (const k of Object.keys(r.outItems || {})) {
           roomTitle(roomName(k, 'en'), `${r.outItems[k].length} items`);
