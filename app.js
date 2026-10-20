@@ -117,7 +117,12 @@
       const recs = (res && res.records) || [];
       const st = recs.find(x => x.id === '_settings');
       if (st) { if (Array.isArray(st.villas) && st.villas.length) S.villas = st.villas; if (Array.isArray(st.users) && st.users.length) S.users = st.users; }
-      else await pushSettings();
+      else {
+        // Fresh shared storage: seed it with this device's villas, users and sample lease.
+        await pushSettings();
+        for (const r of S.records) await pushRecord(r);
+        lastPull = Date.now(); save(); return true;
+      }
       const server = recs.filter(x => x.id !== '_settings');
       const local = S.records;
       S.records = server.map(sr => { const lr = local.find(x => x.id === sr.id); return lr && (lr.status === 'in_draft' || lr.status === 'out_draft') && sr.status !== 'checkin_pending' && sr.status !== 'checkout_pending' && sr.status !== 'closed' ? lr : sr; })
@@ -240,7 +245,7 @@
     const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staf · ${u ? u.name : ''}` : '';
     barEl.innerHTML = `<div class="bar-in">
       <a class="brand" href="#/"><img src="logo-white.png" alt="GW Realty"><span>${S.role === 'mgr' ? 'Inventory' : 'Inventaris'}</span></a>
-      <div class="bar-r"><span class="demo">${LIVE ? 'TEST' : 'DEMO'}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
+      <div class="bar-r"><span class="demo">${esc(API.label || (LIVE ? 'TEST' : 'DEMO'))}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
     </div>`;
   }
 
@@ -280,7 +285,7 @@
       <h1>Villa Inventory</h1>
       <p class="sub">Photos at check-in and check-out. AI makes the list, the manager approves, the system makes the report. Sign in to try it.</p>
       <div class="pick">${mgr.concat(staff).map(btn).join('')}</div>
-      <p class="note">In the live system each person signs in with their email and password. The manager creates staff accounts on the Team page. This is a demo: AI results are simulated and all data stays in this browser.</p>
+      <p class="note">In the live system each person signs in with their email and password. The manager creates staff accounts on the Team page. ${LIVE ? 'This is a demo: AI results are simulated. Data is shared between devices, so staff can work on a phone and the manager on a laptop.' : 'This is a demo: AI results are simulated and all data stays in this browser.'}</p>
     </div>`;
   }
 
@@ -329,7 +334,7 @@
       <div class="head"><div><p class="eyebrow">Halo, ${esc((curUser() || {}).name || '')}</p><h1>Villa</h1></div></div>
       <p class="sub">Pilih villa untuk check-in atau check-out. Cukup ambil foto, daftar barang dibuat otomatis.</p>
       <div class="vlist">${cards}</div>
-      <p class="note">Demo: data hanya tersimpan di browser ini.</p>
+      <p class="note">${LIVE ? 'Demo: data tersambung ke manajer.' : 'Demo: data hanya tersimpan di browser ini.'}</p>
     </div>`;
   }
 
@@ -572,7 +577,7 @@
       </div>
       <div class="card"><h3>Completed</h3>${hist}</div>
       <div class="row" style="justify-content:space-between">
-        <p class="note">Demo: data stays in this browser. Reset to start again with the sample villas.</p>
+        <p class="note">${LIVE ? 'Demo: data is shared with staff phones. Reset clears it for everyone and starts again with the sample villas.' : 'Demo: data stays in this browser. Reset to start again with the sample villas.'}</p>
         <button class="btn danger sm" data-act="reset">Reset demo</button>
       </div>
     </div>`;
@@ -1025,8 +1030,13 @@
     }
     else if (act === 'reset') {
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to reset everything'; return; }
-      try { localStorage.removeItem(KEY); } catch (e2) { /* ignore */ }
-      IDB.clear(); PC.clear(); S = seed(); S.role = 'mgr'; S.user = 'u-mgr'; save(); toast('Demo reset.'); go('#/mgr');
+      (async () => {
+        if (LIVE) { try { await api('gw-reset', { method: 'POST', body: {} }); } catch (e3) { toast('Could not reset the shared data. Check the connection.'); return; } }
+        try { localStorage.removeItem(KEY); } catch (e2) { /* ignore */ }
+        IDB.clear(); PC.clear(); S = seed(); S.role = 'mgr'; S.user = 'u-mgr'; save();
+        if (LIVE) await pullAll(true);
+        toast('Demo reset.'); go('#/mgr'); render(true);
+      })();
     }
   });
   barEl.addEventListener('click', e => { if (e.target.closest('[data-act="switch"]')) { S.user = null; S.role = null; save(); go('#/login'); } });
