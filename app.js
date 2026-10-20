@@ -10,7 +10,7 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v1';
+  const KEY = 'gwinv-demo-v2';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -25,7 +25,9 @@
   const MON_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const fmt = (s, lang) => { const d = parse(s); if (!d) return '—'; const m = (lang === 'id' ? MON_ID : MON_EN)[d.getMonth()]; return `${d.getDate()} ${m} ${d.getFullYear()}`; };
   const daysUntil = s => Math.round((parse(s) - today()) / 864e5);
-  const roomName = (id, lang) => { const r = ROOMS.find(x => x.id === id); return r ? (lang === 'id' ? r.id_ : r.en) : id; };
+  const allRooms = () => ROOMS.concat(...((S && S.villas) || []).map(v => v.rooms || []));
+  const roomName = (id, lang) => { const r = allRooms().find(x => x.id === id); return r ? (lang === 'id' ? r.id_ : r.en) : id; };
+  const roomsFor = vid => { const v = (S.villas || []).find(x => x.id === vid); return ROOMS.concat((v && v.rooms) || []); };
   const count = obj => Object.values(obj || {}).reduce((a, v) => a + (v ? v.length : 0), 0);
 
   /* ---------- state ---------- */
@@ -39,7 +41,11 @@
     const wg = bromoItems.kitchen.find(i => i.name === 'Wine glasses');
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
-      v: 1, role: null,
+      v: 2, role: null, user: null,
+      users: [
+        { id: 'u-mgr', name: 'Manager', email: 'manager@gwrealtyglobal.com', role: 'mgr' },
+        { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff' }
+      ],
       villas: [
         { id: 'madya1', name: 'Villa Madya 1', area: '' },
         { id: 'bromo', name: 'Villa Bromo', area: 'Petitenget' },
@@ -56,12 +62,13 @@
   }
   function load() {
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-    if (!S || S.v !== 1) S = seed();
+    if (!S || S.v !== 2) S = seed();
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');
   const T = (id, en) => (L() === 'id' ? id : en);
   const villa = id => S.villas.find(v => v.id === id);
+  const curUser = () => (S.users || []).find(u => u.id === S.user);
   const rec = id => S.records.find(r => r.id === id);
   const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed');
 
@@ -146,10 +153,11 @@
   const phEmpty = label => `<div class="ph-empty"><span>${esc(label)}</span></div>`;
 
   function renderBar() {
-    const role = S.role === 'mgr' ? 'Manager' : S.role === 'staff' ? 'Staf · Wayan' : '';
+    const u = curUser();
+    const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staf · ${u ? u.name : ''}` : '';
     barEl.innerHTML = `<div class="bar-in">
       <a class="brand" href="#/"><i aria-hidden="true"></i>${S.role === 'mgr' ? 'GW Inventory' : 'GW Inventaris'}</a>
-      <div class="bar-r"><span class="demo">DEMO</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Switch role' : 'Ganti peran'}</button>` : ''}</div>
+      <div class="bar-r"><span class="demo">DEMO</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
     </div>`;
   }
 
@@ -160,6 +168,8 @@
     const y = window.scrollY;
     viewToken++;
     const p = location.hash.replace(/^#\/?/, '').split('/');
+    const u = curUser();
+    if ((p[0] === 'staff' || p[0] === 'mgr') && (!u || u.role !== p[0])) { location.hash = '#/login'; return; }
     if (p[0] === 'staff') S.role = 'staff';
     if (p[0] === 'mgr') S.role = 'mgr';
     if (p[0] === '' && S.role) { go(S.role === 'mgr' ? '#/mgr' : '#/staff'); return; }
@@ -169,6 +179,7 @@
     else if (p[0] === 'mgr' && p[1] === 'rec') viewRecord(p[2]);
     else if (p[0] === 'mgr' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'mgr' && p[1] === 'new') viewNew();
+    else if (p[0] === 'mgr' && p[1] === 'team') viewTeam();
     else if (p[0] === 'mgr') viewMgrHome();
     else viewLogin();
     save();
@@ -179,16 +190,37 @@
 
   /* ---------- login ---------- */
   function viewLogin() {
-    S.role = null; renderBar();
+    S.role = null; S.user = null; renderBar();
+    const mgr = S.users.filter(u => u.role === 'mgr'), staff = S.users.filter(u => u.role === 'staff');
+    const btn = u => `<button data-act="login" data-u="${u.id}"><b>${esc(u.name)}</b><span>${esc(u.email)} · ${u.role === 'mgr' ? 'Manager: checks the AI list, approves, makes the PDF.' : 'Staff: takes photos at the villa (screens in Indonesian).'}</span></button>`;
     app.innerHTML = `<div class="login">
       <p class="eyebrow">GW Realty · Demo</p>
       <h1>Villa Inventory</h1>
-      <p class="sub">Photos at check-in and check-out. AI makes the list, the manager approves, the system makes the report. Choose a role to try it.</p>
-      <div class="pick">
-        <button data-act="role" data-role="staff"><b>Staff</b><span>On the phone. Takes photos at the villa. Screens in Indonesian.</span></button>
-        <button data-act="role" data-role="mgr"><b>Manager</b><span>On the computer. Checks the AI list, approves, makes the PDF.</span></button>
+      <p class="sub">Photos at check-in and check-out. AI makes the list, the manager approves, the system makes the report. Sign in to try it.</p>
+      <div class="pick">${mgr.concat(staff).map(btn).join('')}</div>
+      <p class="note">In the live system each person signs in with their email and password. The manager creates staff accounts on the Team page. This is a demo: AI results are simulated and all data stays in this browser.</p>
+    </div>`;
+  }
+
+  /* ---------- team (manager creates accounts) ---------- */
+  function viewTeam() {
+    const rows = S.users.map(u => `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.email)}</td><td>${u.role === 'mgr' ? chip('ok', 'Manager') : chip('', 'Staff')}</td>
+      <td style="text-align:right">${u.role === 'staff' ? `<button class="btn ghost sm" data-act="delUser" data-u="${u.id}">Remove</button>` : ''}</td></tr>`).join('');
+    app.innerHTML = `<div class="page narrow">
+      <a href="#/mgr">← Villas</a>
+      <div class="head"><div><p class="eyebrow">Accounts</p><h1>Team</h1></div></div>
+      <p class="sub">One manager approves everything. Create an account for each staff member who takes photos.</p>
+      <div class="tbl"><table class="vt"><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>${rows}</table></div>
+      <div class="card">
+        <h3>Create staff account</h3>
+        <div class="form">
+          <div class="fld"><label for="nuName">Name</label><input id="nuName" placeholder="e.g. Komang"></div>
+          <div class="fld"><label for="nuEmail">Email</label><input id="nuEmail" type="email" placeholder="komang@gwrealtyglobal.com"></div>
+        </div>
+        <p class="err" id="nuErr" hidden></p>
+        <button class="btn" data-act="addUser">Create account</button>
+        <p class="note">In the live system the new staff member gets an email to set their password.</p>
       </div>
-      <p class="note">This is a demo. AI results are simulated and all data stays in this browser. Nothing is sent anywhere.</p>
     </div>`;
   }
 
@@ -212,7 +244,7 @@
       return `<div class="villa"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
     }).join('');
     app.innerHTML = `<div class="page narrow">
-      <div class="head"><div><p class="eyebrow">Halo, Wayan</p><h1>Villa</h1></div></div>
+      <div class="head"><div><p class="eyebrow">Halo, ${esc((curUser() || {}).name || '')}</p><h1>Villa</h1></div></div>
       <p class="sub">Pilih villa untuk check-in atau check-out. Cukup ambil foto, daftar barang dibuat otomatis.</p>
       <div class="vlist">${cards}</div>
       <p class="note">Demo: data hanya tersimpan di browser ini.</p>
@@ -232,7 +264,7 @@
       return;
     }
     const photos = r[phase + 'Photos'] || (r[phase + 'Photos'] = {});
-    const rooms = ROOMS.map(room => {
+    const rooms = roomsFor(r.villaId).map(room => {
       const list = photos[room.id] || [];
       const ref = phase === 'out' ? (r.inPhotos[room.id] || []) : [];
       const refHtml = phase === 'out'
@@ -256,6 +288,10 @@
       ${phase === 'out' ? `<div class="banner">${T('Ambil foto dari sudut yang sama dengan foto check-in.', 'Take each photo from the same angle as the check-in photo.')}</div>` : ''}
       <p class="note" id="busy" hidden></p>
       ${rooms}
+      <div class="card addroom">
+        <h3>${T('Ruangan lain?', 'Another room?')}</h3>
+        <div class="row"><input id="newRoom" placeholder="${T('mis. Kamar 4, Teras, Kamar mandi luar', 'e.g. Bedroom 4, Terrace, Outdoor bathroom')}" aria-label="${T('Nama ruangan', 'Room name')}"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ ${T('Tambah ruangan', 'Add room')}</button></div>
+      </div>
       <div class="sticky">
         <p class="err" id="sendErr" hidden></p>
         <button class="btn block" data-act="send" data-r="${r.id}">${T(`Kirim ${total} foto`, `Send ${total} photos`)}</button>
@@ -296,7 +332,7 @@
     const err = document.getElementById('sendErr');
     const total = count(photos);
     if (!total) { err.hidden = false; err.textContent = T('Tambahkan minimal satu foto.', 'Add at least one photo.'); return; }
-    const missing = ROOMS.filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id, L()));
+    const missing = roomsFor(r.villaId).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id, L()));
     if (missing.length && !confirmMissing) {
       confirmMissing = true;
       err.hidden = false;
@@ -331,7 +367,7 @@
   }
   function remindersFor(r) {
     const co = parse(r.checkOut); if (!co) return [];
-    return [7, 1].map(n => { const d = addDays(co, -n); return { d: iso(d), n, sent: d <= today() }; });
+    return [7].map(n => { const d = addDays(co, -n); return { d: iso(d), n, sent: d <= today() }; });
   }
   function viewMgrHome() {
     const rows = S.villas.map(v => {
@@ -345,19 +381,19 @@
     const upcoming = S.records.filter(r => (r.status === 'occupied' || r.status === 'out_draft') && r.checkOut).sort((a, b) => a.checkOut.localeCompare(b.checkOut));
     const rem = upcoming.length ? upcoming.map(r => {
       const d = daysUntil(r.checkOut);
-      const rs = remindersFor(r).map(x => `${fmt(x.d)} (${x.n === 7 ? '7 days before' : '1 day before'}${x.sent ? ', sent' : ''})`).join(' · ');
-      return `<div class="tg"><b>⏰ ${esc(villa(r.villaId).name)}</b>Check-out ${fmt(r.checkOut)}${d >= 0 ? ` · in ${d} day${d === 1 ? '' : 's'}` : ' · overdue'}<br><small>Telegram: ${rs}</small></div>`;
+      const rs = remindersFor(r).map(x => `${fmt(x.d)} (7 days before${x.sent ? ', sent' : ''})`).join(' · ');
+      return `<div class="tg"><b>⏰ ${esc(villa(r.villaId).name)}</b>Check-out ${fmt(r.checkOut)}${d >= 0 ? ` · in ${d} day${d === 1 ? '' : 's'}` : ' · overdue'}<br><small>Email to manager: ${rs}</small></div>`;
     }).join('') : '<p class="note">No upcoming check-outs.</p>';
     const closed = S.records.filter(r => r.status === 'closed').sort((a, b) => (b.outApprovedAt || 0) - (a.outApprovedAt || 0));
     const hist = closed.length ? `<div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Changes</th><th></th></tr>
-      ${closed.map(r => { const c = changes(r).filter(x => x.res.k !== 'wr' && x.res.k !== 'gy').length; return `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td>${esc(r.tenant)}</td><td class="num">${fmt(r.checkIn)}</td><td class="num">${fmt(r.checkOut)}</td><td>${c ? chip('am', `${c} to settle`) : chip('ok', 'None')}</td>
+      ${closed.map(r => { const c = changes(r).filter(x => x.res.k !== 'wr' && x.res.k !== 'gy').length; return `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td>${esc(r.tenant || '—')}</td><td class="num">${fmt(r.checkIn)}</td><td class="num">${fmt(r.checkOut)}</td><td>${c ? chip('am', `${c} to settle`) : chip('ok', 'None')}</td>
       <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Check-in PDF</button><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="out">Check-out PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`; }).join('')}
       </table></div>` : '<p class="note">Completed check-outs will appear here.</p>';
     app.innerHTML = `<div class="page">
-      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><a class="btn" href="#/mgr/new">+ New check-in</a></div>
+      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ New check-in</a></div></div>
       <div class="grid2">
         <div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
-        <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">In the live system these go to the GW Realty Telegram group.</p></div>
+        <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">In the live system an email goes to the manager 7 days before each check-out.</p></div>
       </div>
       <div class="card"><h3>Completed</h3>${hist}</div>
       <div class="row" style="justify-content:space-between">
@@ -386,8 +422,9 @@
   /* ---------- simulated AI ---------- */
   function simIn(r) {
     const items = {};
-    ROOMS.forEach(room => {
+    roomsFor(r.villaId).forEach(room => {
       if (!(r.inPhotos[room.id] || []).length) return;
+      if (!CAT[room.id]) { items[room.id] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: rename or remove', src: 'ai', flag: '' }]; return; }
       items[room.id] = CAT[room.id].filter(([n]) => !HIDDEN.has(n)).map(([name, qty]) => ({
         id: uid(), name, qty, cond: name === 'Wine glasses' ? 'Damaged' : 'Good', note: name === 'Wine glasses' ? '1 cracked' : '',
         src: 'ai', flag: SMALL.has(name) ? 'small' : ''
@@ -482,10 +519,10 @@
     const v = villa(r.villaId);
     const edit = r.status === 'checkin_pending';
     const items = r.inItems || {};
-    const roomIds = ROOMS.map(x => x.id).filter(k => items[k] || (r.inPhotos[k] || []).length);
+    const roomIds = roomsFor(r.villaId).map(x => x.id).filter(k => items[k] || (r.inPhotos[k] || []).length);
     const nItems = Object.values(items).reduce((a, l) => a + l.length, 0);
     const nPh = count(r.inPhotos);
-    const noPhotoRooms = ROOMS.filter(x => !(r.inPhotos[x.id] || []).length).map(x => x.en);
+    const noPhotoRooms = roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length && !items[x.id]).map(x => x.en);
     const blocks = roomIds.map(k => {
       const list = items[k] || [];
       const rowsHtml = list.map(it => edit
@@ -505,13 +542,17 @@
         </div>
       </div>`;
     }).join('');
-    const rem = remindersFor(r).map(x => `${fmt(x.d)} (${x.n === 7 ? '7 days before' : '1 day before'}${x.sent ? ', sent' : ''})`).join(' · ');
+    const rem = remindersFor(r).map(x => `email on ${fmt(x.d)} (7 days before${x.sent ? ', sent' : ''})`).join(' · ');
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <div class="card"><div class="form">
         <div class="fld"><label for="f-villa">Villa</label><input id="f-villa" value="${esc(v.name)}" readonly></div>
-        <div class="fld"><label for="f-tenant">Tenant</label><input id="f-tenant" data-f="tenant" value="${esc(r.tenant)}" placeholder="Tenant name" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-tenant">Tenant name <span class="opt">optional</span></label><input id="f-tenant" data-f="tenant" value="${esc(r.tenant)}" placeholder="Tenant name" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-phone">Phone <span class="opt">optional</span></label><input id="f-phone" data-f="phone" value="${esc(r.phone)}" placeholder="+62…" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-email">Email <span class="opt">optional</span></label><input id="f-email" type="email" data-f="email" value="${esc(r.email)}" placeholder="tenant@email.com" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-idno">Passport / ID no. <span class="opt">optional</span></label><input id="f-idno" data-f="idNo" value="${esc(r.idNo)}" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-notes">Notes <span class="opt">optional</span></label><input id="f-notes" data-f="notes" value="${esc(r.notes)}" placeholder="e.g. deposit amount, agent" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-in">Check-in date</label><input id="f-in" type="date" data-f="checkIn" value="${esc(r.checkIn)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>
       </div></div>
@@ -519,8 +560,9 @@
       ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}.</div>` : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
       ${blocks}
+      ${edit ? `<div class="card addroom"><h3>Add a room</h3><div class="row"><input id="newRoom" placeholder="e.g. Bedroom 4, Terrace" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}" data-r="${r.id}">+ Add room</button></div><p class="note">The room is saved for this villa, so it appears at every future check-in and check-out.</p></div>` : ''}
       <div class="actions">
-        <div>${edit ? '<p class="note">Check the list, fill in the tenant and dates, then approve.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" id="apErr" hidden></p></div>
+        <div>${edit ? '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" id="apErr" hidden></p></div>
         <div class="row">
           ${edit ? `<button class="btn" data-act="approveIn" data-r="${r.id}">✓ Approve check-in</button>` : ''}
           <button class="btn ${edit ? 'ghost' : ''}" data-act="pdf" data-r="${r.id}" data-ph="in" ${edit ? 'disabled title="Available after approval"' : ''}>📄 Generate PDF</button>
@@ -563,7 +605,7 @@
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-out review' : 'Check-out · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
-      <p class="sub">Tenant: <b>${esc(r.tenant)}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)}</p>
+      <p class="sub">Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)}</p>
       ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the approved check-in list (${nItems} items).</b> ${ch.length} change${ch.length === 1 ? '' : 's'} found. Confirm or correct each one. Items already damaged at check-in are not counted again.</div>` : ''}
       ${unchecked.length ? `<div class="banner am">No check-out photos for: ${esc(unchecked.join(', '))}. Those items are marked "Not photographed".</div>` : ''}
       <div class="card"><h3>Changes since check-in</h3>
@@ -608,12 +650,15 @@
       // meta
       doc.setFontSize(10);
       const meta = [['Villa', v.name], ['Tenant', r.tenant || '-'], ['Check-in', fmt(r.checkIn)], ['Check-out', fmt(r.checkOut)],
-        ['Approved', fmt(iso(new Date(phase === 'in' ? r.inApprovedAt : r.outApprovedAt || Date.now())))], ['Approved by', 'Manager (demo)']];
+        ['Approved', fmt(iso(new Date(phase === 'in' ? r.inApprovedAt : r.outApprovedAt || Date.now())))], ['Approved by', 'Manager']];
+      if (r.phone) meta.push(['Phone', r.phone]);
+      if (r.email) meta.push(['Email', r.email]);
+      if (r.idNo) meta.push(['ID no.', r.idNo]);
       meta.forEach((m, i) => {
         const x = i % 2 === 0 ? M : W / 2; const yy = y + Math.floor(i / 2) * 6;
         doc.setFont('helvetica', 'bold'); doc.text(`${m[0]}:`, x, yy); doc.setFont('helvetica', 'normal'); doc.text(String(m[1]), x + 24, yy);
       });
-      y += 22;
+      y += Math.ceil(meta.length / 2) * 6 + 4;
       const photoRow = async (ids, label, maxN) => {
         const n = Math.max(1, Math.min(maxN, ids.length || 1)); const gap = 3;
         const bw = (W - 2 * M - gap * (maxN - 1)) / maxN, bh = bw * 0.75;
@@ -668,11 +713,20 @@
           table(['Item', 'Check-in', 'Check-out', 'Result'], r.outItems[k].map(it => [it.name, `${it.inQty} ${it.inCond}`, `${it.qty} ${it.cond}`, result(it).t]), { 1: { cellWidth: 30 }, 2: { cellWidth: 30 }, 3: { cellWidth: 34 } });
         }
       }
-      // signatures
-      need(28); y += 10;
-      doc.setDrawColor(...DARK); doc.line(M, y, M + 70, y); doc.line(W - M - 70, y, W - M, y);
+      // tenant acknowledgement + signatures
+      need(62); y += 6;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Tenant acknowledgement', M, y); y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      const ack = phase === 'in'
+        ? 'I confirm that I have checked the villa and that the items, quantities and conditions listed in this report are correct at check-in. I agree to return them in the same condition, except for normal wear.'
+        : 'I confirm that I have reviewed this check-out report, including the comparison with the check-in report, and that the items, quantities and conditions listed are correct at check-out.';
+      const lines = doc.splitTextToSize(ack, W - 2 * M); doc.text(lines, M, y); y += lines.length * 4.5 + 16;
+      doc.setDrawColor(...DARK); doc.line(M, y, M + 75, y); doc.line(W - M - 75, y, W - M, y);
       doc.setFontSize(9); doc.setTextColor(...MUTED);
-      doc.text('Manager', M, y + 5); doc.text('Tenant', W - M - 70, y + 5);
+      doc.text('Manager, GW Realty', M, y + 5); doc.text('Tenant', W - M - 75, y + 5);
+      doc.text('Name:', M, y + 11); doc.text(`Name: ${r.tenant || ''}`, W - M - 75, y + 11);
+      doc.text('Date:', M, y + 17); doc.text('Date:', W - M - 75, y + 17);
+      doc.setTextColor(...DARK); y += 22;
       // headers on pages added by autoTable + footers
       const pages = doc.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
@@ -683,7 +737,7 @@
           doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`Villa Inventory · ${title}`, M, 17.5); doc.text(repNo, W - M, 11, { align: 'right' });
         }
         doc.setFontSize(8); doc.setTextColor(...MUTED);
-        doc.text(`${v.name} · ${title} · Demo report`, M, 291);
+        doc.text(`${v.name} · ${title} · GW Realty`, M, 291);
         doc.text(`Page ${i} of ${pages}`, W - M, 291, { align: 'right' });
       }
       const fname = `${v.name.replace(/[^A-Za-z0-9]+/g, '-')}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
@@ -734,7 +788,23 @@
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'role') { S.role = b.dataset.role; save(); go(S.role === 'mgr' ? '#/mgr' : '#/staff'); }
+    if (act === 'login') { const u = S.users.find(x => x.id === b.dataset.u); if (!u) return; S.user = u.id; S.role = u.role; save(); go(u.role === 'mgr' ? '#/mgr' : '#/staff'); }
+    else if (act === 'addUser') {
+      const n = document.getElementById('nuName').value.trim(), em = document.getElementById('nuEmail').value.trim(), err = document.getElementById('nuErr');
+      if (!n || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.hidden = false; err.textContent = 'Add a name and a valid email.'; return; }
+      if (S.users.some(u => u.email.toLowerCase() === em.toLowerCase())) { err.hidden = false; err.textContent = 'An account with this email already exists.'; return; }
+      S.users.push({ id: uid(), name: n, email: em, role: 'staff' }); save(); toast(`Account created for ${n}.`); render();
+    }
+    else if (act === 'delUser') { S.users = S.users.filter(u => u.id !== b.dataset.u); save(); render(true); }
+    else if (act === 'addRoom') {
+      const inp = document.getElementById('newRoom'); const name = inp ? inp.value.trim() : '';
+      if (!name) { toast(T('Ketik nama ruangan dulu.', 'Type the room name first.')); return; }
+      const v = villa(b.dataset.v); v.rooms = v.rooms || [];
+      if (roomsFor(v.id).some(x => x.en.toLowerCase() === name.toLowerCase())) { toast(T('Ruangan ini sudah ada.', 'This room already exists.')); return; }
+      const room = { id: 'rm-' + uid(), en: name, id_: name }; v.rooms.push(room);
+      if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) r.inItems[room.id] = []; }
+      save(); toast(T(`${name} ditambahkan.`, `${name} added.`)); render(true);
+    }
     else if (act === 'startIn') {
       const r = { id: uid(), villaId: b.dataset.v, tenant: '', checkIn: iso(today()), checkOut: '', status: 'in_draft', inPhotos: {}, inItems: null, outPhotos: {}, outItems: null, createdAt: Date.now() };
       S.records.push(r); save(); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
@@ -759,7 +829,6 @@
     }
     else if (act === 'approveIn') {
       const r = rec(b.dataset.r); const err = document.getElementById('apErr'); const probs = [];
-      if (!r.tenant || !r.tenant.trim()) probs.push('Add the tenant name.');
       if (!r.checkIn) probs.push('Add the check-in date.');
       if (!r.checkOut) probs.push('Add the check-out date.');
       if (r.checkIn && r.checkOut && r.checkOut <= r.checkIn) probs.push('The check-out date must be after the check-in date.');
@@ -768,7 +837,7 @@
       if (!Object.values(r.inItems || {}).some(l => l.length)) probs.push('The list is empty.');
       if (probs.length) { err.hidden = false; err.textContent = probs.join(' '); return; }
       r.status = 'occupied'; r.inApprovedAt = Date.now(); save();
-      toast('Check-in approved. Check-out reminders are scheduled.'); render();
+      toast('Check-in approved. Check-out reminder email is scheduled.'); render();
     }
     else if (act === 'approveOut') {
       const r = rec(b.dataset.r); r.status = 'closed'; r.outApprovedAt = Date.now(); save();
@@ -783,10 +852,10 @@
     else if (act === 'reset') {
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to reset everything'; return; }
       try { localStorage.removeItem(KEY); } catch (e2) { /* ignore */ }
-      IDB.clear(); PC.clear(); S = seed(); S.role = 'mgr'; save(); toast('Demo reset.'); go('#/mgr');
+      IDB.clear(); PC.clear(); S = seed(); S.role = 'mgr'; S.user = 'u-mgr'; save(); toast('Demo reset.'); go('#/mgr');
     }
   });
-  barEl.addEventListener('click', e => { if (e.target.closest('[data-act="switch"]')) go('#/login'); });
+  barEl.addEventListener('click', e => { if (e.target.closest('[data-act="switch"]')) { S.user = null; S.role = null; save(); go('#/login'); } });
 
   load();
   render();
