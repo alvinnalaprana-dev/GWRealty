@@ -10,7 +10,7 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v4';
+  const KEY = 'gwinv-demo-v5';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -41,9 +41,9 @@
     const wg = bromoItems.kitchen.find(i => i.name === 'Wine glasses');
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
-      v: 4, role: null, user: null,
+      v: 5, role: null, user: null,
       users: [
-        { id: 'u-mgr', name: 'Manager', email: 'manager@gwrealtyglobal.com', role: 'mgr' },
+        { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr' },
         { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff' }
       ],
       villas: [
@@ -62,7 +62,7 @@
   }
   function load() {
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-    if (!S || S.v !== 4) S = seed();
+    if (!S || S.v !== 5) S = seed();
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');

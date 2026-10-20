@@ -21,7 +21,7 @@ Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 no
    - **Anthropic API key** (type *Header Auth*): Name `x-api-key`, Value = an API key from console.anthropic.com (prepaid credit, set a spend limit). Not the Claude Pro plan.
    - **Google Sheets account**, **Google Drive account**, **Gmail account** (OAuth2): sign in with **Alvin's Google account** (alvin.nalaprana@gmail.com) for all three. Decided with GW Realty on 20 Oct 2026: the system runs on Alvin's Drive; GW Realty gets view access to photos and PDFs only, and their own Google account and data are never connected.
 3. **Open each workflow** and pick the credential on every node with a warning triangle.
-4. **GW-7 Reminder:** change `manager@example.com` on the *Email manager* node to the manager's email.
+4. **GW-7 Reminder:** already set to send to the manager, manno.realtor@gmail.com.
 5. **Activate** all six workflows (toggle top right).
 6. **Connect the page:** in `config.js` set
    ```js
