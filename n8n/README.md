@@ -19,7 +19,10 @@ Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 no
 2. **Create five credentials** in n8n (Credentials → Add):
    - **GW Inventory key** (type *Header Auth*): Name `X-GW-Key`, Value = a long random string. This protects every webhook.
    - **Anthropic API key** (type *Header Auth*): Name `x-api-key`, Value = an API key from console.anthropic.com (prepaid credit, set a spend limit). Not the Claude Pro plan.
-   - **Google Sheets account**, **Google Drive account**, **Gmail account** (OAuth2). For testing, sign in with the account that owns the `GW Realty Inventory (TEST)` folder. For live use, sign in with GW Realty's Google account.
+   - **Google Sheets account**, **Google Drive account**, **Gmail account** (OAuth2). For testing, sign in with the account that owns the `GW Realty Inventory (TEST)` folder. For live use:
+     - **Google Drive account → GW Realty's Google account.** Photos and PDFs then belong to GW Realty and use their storage. (In a normal Google Drive, a file uploaded into a shared folder belongs to whoever uploaded it, so uploading with Kriyator's account would put the photos in Kriyator's storage.)
+     - **Google Sheets account → Kriyator's account** (kriyator@kriyator.com). Create a new sheet there with the same header row as the test sheet and share it with GW Realty. Records live in this shared sheet; GW Realty's own agreement sheet is not connected.
+     - **Gmail account →** whichever account should send the reminder emails.
 3. **Open each workflow** and pick the credential on every node with a warning triangle.
 4. **GW-7 Reminder:** change `manager@example.com` on the *Email manager* node to the manager's email.
 5. **Activate** all six workflows (toggle top right).
