@@ -4,18 +4,17 @@ Live demo: https://gwrealty.netlify.app
 
 A clickable demo of the villa inventory system for GW Realty, built by Kriyator.
 
-## What it shows
+## What it shows (updated 20 Oct 2026, second client meeting)
 
-1. **Check-in** — staff take photos of each room (camera or gallery, phone or desktop).
-2. **AI list** — the system lists the items it sees per room (simulated in this demo).
-3. **Manager review** — the manager edits the list, adds villa, tenant, check-in and check-out dates, and approves.
-4. **PDF** — "Generate PDF" makes the check-in report with photos and the approved list.
-5. **Reminders** — a check-out reminder email to the manager 7 days before (shown on the manager page).
-6. **Check-out** — new photos on the same record; AI compares with the approved check-in list; the manager confirms each change, approves, and generates the check-out PDF.
+1. **Inventory (staff, phone)** — the inventory date can differ from the tenant's check-in date. Staff photograph each room; as soon as a room has a usable photo, AI lists the items for that room (simulated). Staff check and edit the list, add items manually, and add rooms (quick buttons for Miscellaneous, Terrace, Bathroom, Pool area, Garden).
+2. **Dark photos** — brightness is checked on the phone the moment a photo is added. Dark photos are flagged red, ignored by the AI, left out of the PDF, and must be removed or retaken before sending.
+3. **Manager review** — the manager only edits and approves (no adding or deleting items). Picks the agreement code (from the manager's agreement Google Sheet; demo list), optional tenant details, inventory, check-in and check-out dates.
+4. **PDF** — agreement code in the header and file name; inventory date shown when it differs from the check-in date; tenant acknowledgement; signature lines for Owner / Villa / Listing (Owner's Representative) on the left and Tenant on the right. Printed and signed on paper.
+5. **Reminder** — email to the manager 7 days before check-out.
+6. **Check-out (staff)** — the check-in list is pre-filled; per room, AI compares the new photos and flags changes; staff correct; manager approves; check-out PDF shows check-in and check-out photos side by side.
+7. **Accounts** — the manager creates staff accounts on the Team page.
 
 Staff screens are in Indonesian; manager screens and PDFs are in English.
-
-Updated 20 Oct 2026 after the client meeting: rooms can be added per villa, tenant details are optional, the manager creates staff accounts (Team page), one email reminder 7 days before check-out, an agreement code picked from the manager's agreement Google Sheet (required to approve; shown on the PDF and in its file name), and the PDF has a tenant acknowledgement with manager and tenant signature lines.
 
 ## Demo limits
 

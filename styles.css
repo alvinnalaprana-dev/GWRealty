@@ -211,3 +211,12 @@ details.all[open] summary{margin-bottom:6px}
   .actions .btn{width:100%;justify-content:center;text-align:center}
   .card .row .btn{flex:1 1 auto}
 }
+
+/* v3: per-room AI on the staff screen, dark-photo warning, room suggestions */
+.th .dark{position:absolute;left:4px;top:4px;font-size:10px;font-weight:700;background:var(--red-soft);color:var(--red);border-radius:4px;padding:1px 5px}
+.banner.rd{background:var(--red-soft);color:var(--ink)}
+.aibusy{display:flex;align-items:center;gap:10px;background:var(--ai-soft);border-radius:10px;padding:12px 14px;font-size:14px}
+.spin.sm{width:22px;height:22px;border-width:3px;flex:none}
+.ailist{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px}
+.sugg{display:flex;flex-wrap:wrap;gap:8px}
+.chipbtn{border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600}

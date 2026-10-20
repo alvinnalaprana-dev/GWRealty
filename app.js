@@ -10,7 +10,7 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v3';
+  const KEY = 'gwinv-demo-v4';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -41,7 +41,7 @@
     const wg = bromoItems.kitchen.find(i => i.name === 'Wine glasses');
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
-      v: 3, role: null, user: null,
+      v: 4, role: null, user: null,
       /* Demo copy of the manager's agreement Google Sheet (live: read from the sheet) */
       agreements: ['GWR-AG-2026-031', 'GWR-AG-2026-032', 'GWR-AG-2026-033', 'GWR-AG-2026-034', 'GWR-AG-2026-035'],
       users: [
@@ -56,7 +56,7 @@
       ],
       records: [{
         id: 'demo01', villaId: 'bromo', tenant: 'Demo Tenant', agreement: 'GWR-AG-2026-019', seeded: true,
-        checkIn: iso(addDays(t, -88)), checkOut: iso(addDays(t, 3)),
+        invDate: iso(addDays(t, -90)), checkIn: iso(addDays(t, -88)), checkOut: iso(addDays(t, 3)),
         status: 'occupied', inPhotos: {}, inItems: bromoItems, inApprovedAt: Date.now() - 88 * 864e5,
         outPhotos: {}, outItems: null, createdAt: Date.now() - 88 * 864e5
       }]
@@ -64,7 +64,7 @@
   }
   function load() {
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-    if (!S || S.v !== 3) S = seed();
+    if (!S || S.v !== 4) S = seed();
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');
@@ -124,7 +124,10 @@
     const w = Math.round(w0 * sc), h = Math.round(h0 * sc);
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(src, 0, 0, w, h);
-    return { data: c.toDataURL('image/jpeg', 0.72), w, h, old: !!(file.lastModified && Date.now() - file.lastModified > 864e5), size: file.size };
+    const sc2 = document.createElement('canvas'); sc2.width = 24; sc2.height = 24; const x2 = sc2.getContext('2d'); x2.drawImage(c, 0, 0, 24, 24);
+    const px = x2.getImageData(0, 0, 24, 24).data; let lum = 0; for (let i = 0; i < px.length; i += 4) lum += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+    lum /= px.length / 4;
+    return { data: c.toDataURL('image/jpeg', 0.72), w, h, lum: Math.round(lum), dark: lum < 55, old: !!(file.lastModified && Date.now() - file.lastModified > 864e5), size: file.size };
   }
   function labelTables() {
     app.querySelectorAll('table').forEach(t => {
@@ -187,7 +190,6 @@
     if (p[0] === 'staff' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'staff') viewStaffHome();
     else if (p[0] === 'mgr' && p[1] === 'rec') viewRecord(p[2]);
-    else if (p[0] === 'mgr' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'mgr' && p[1] === 'new') viewNew();
     else if (p[0] === 'mgr' && p[1] === 'team') viewTeam();
     else if (p[0] === 'mgr') viewMgrHome();
@@ -261,116 +263,181 @@
     </div>`;
   }
 
-  /* ---------- capture (staff, or manager uploading from the office) ---------- */
+  /* ---------- capture (staff): photos per room, AI lists items, staff checks them ---------- */
   let confirmMissing = false;
+  const BUSY = new Set();
+  const CONDS_ID = { Good: 'Baik', Worn: 'Aus', Damaged: 'Rusak' };
+  const ROOM_SUGGEST = [['Miscellaneous', 'Lain-lain'], ['Terrace', 'Teras'], ['Bathroom', 'Kamar mandi'], ['Pool area', 'Area kolam'], ['Garden', 'Taman']];
+  const phaseOf = r => (r.status === 'in_draft' || r.status === 'checkin_pending' ? 'in' : 'out');
+  const capRooms = (r, phase) => phase === 'in' ? roomsFor(r.villaId) : roomsFor(r.villaId).filter(x => (r.inItems || {})[x.id]);
+  const goodPhotos = async ids => { const out = []; for (const id of ids || []) { const p = await getPhoto(id); if (p && !p.dark) out.push(id); } return out; };
+
+  function staffInTable(r, k) {
+    const list = r.inItems[k] || [];
+    const rows = list.map(it => `<tr data-iid="${it.id}"><td><div class="nmw"><input class="nm" data-k="name" data-room="${k}" data-iid="${it.id}" value="${esc(it.name)}" placeholder="Nama barang" aria-label="Nama barang">${it.flag === 'small' ? '<span class="warnico" title="Barang kecil: cek jumlahnya">⚠</span>' : ''}</div></td>
+      <td><input class="q" type="number" min="0" inputmode="numeric" data-k="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Jumlah"></td>
+      <td><select data-k="cond" data-room="${k}" data-iid="${it.id}" aria-label="Kondisi">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
+      <td><input data-k="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Catatan" aria-label="Catatan"></td>
+      <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Ditambah' : 'Diubah'}</span></td>
+      <td><button class="del" data-act="delItem" data-room="${k}" data-iid="${it.id}" aria-label="Hapus barang">✕</button></td></tr>`).join('');
+    return `<div class="ailist"><p class="note"><b>Daftar dari AI: ${list.length} barang.</b> Cek nama, jumlah dan kondisi. Barang ⚠ kecil: hitung ulang.</p>
+      <div style="overflow-x:auto"><table class="itbl"><tr><th>Barang</th><th>Jml</th><th>Kondisi</th><th>Catatan</th><th>Sumber</th><th></th></tr>${rows || '<tr><td colspan="6" class="note">Belum ada barang.</td></tr>'}</table></div>
+      <button class="add" data-act="addItem" data-room="${k}">+ Tambah barang</button></div>`;
+  }
+  function staffOutTable(r, k) {
+    const list = (r.outItems || {})[k] || [];
+    const checked = list.length && !list[0].unchecked;
+    if (!checked) return `<p class="note">${list.length} barang dari check-in. Ambil foto, AI akan mencocokkan.</p>`;
+    const row = it => { const res = result(it); return `<tr class="${res.t !== 'Same' ? 'chg' : ''}"><td><b>${esc(it.name)}</b></td><td>${it.inQty} · ${CONDS_ID[it.inCond]}</td>
+      <td><input class="q" type="number" min="0" inputmode="numeric" data-ok="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Jumlah check-out"></td>
+      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Kondisi check-out">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
+      <td>${chip(res.k, res.t)}</td></tr>`; };
+    const head = '<tr><th>Barang</th><th>Check-in</th><th>Jml</th><th>Kondisi</th><th>Hasil</th></tr>';
+    const ch = list.filter(it => result(it).t !== 'Same');
+    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} perubahan` : 'tidak ada perubahan'}.</b> Cek dan perbaiki bila perlu.</p>
+      ${ch.length ? `<div style="overflow-x:auto"><table class="itbl">${head}${ch.map(row).join('')}</table></div>` : ''}
+      <details class="all"><summary>Lihat semua ${list.length} barang</summary><div style="overflow-x:auto"><table class="itbl">${head}${list.map(row).join('')}</table></div></details></div>`;
+  }
+
   function viewCapture(id) {
     const r = rec(id);
     if (!r) { go('#/'); return; }
     const v = villa(r.villaId);
-    const phase = r.status.startsWith('in') || r.status === 'checkin_pending' ? 'in' : 'out';
-    const home = S.role === 'mgr' ? '#/mgr' : '#/staff';
+    const phase = phaseOf(r);
+    const home = '#/staff';
     if (r.status !== 'in_draft' && r.status !== 'out_draft') {
-      app.innerHTML = `<div class="page narrow"><a href="${home}">← ${T('Kembali', 'Back')}</a><div class="card"><p>${T('Foto sudah dikirim ke manajer.', 'Photos have already been sent for review.')}</p></div></div>`;
+      app.innerHTML = `<div class="page narrow"><a href="${home}">← Kembali</a><div class="card"><p>Sudah dikirim ke manajer.</p></div></div>`;
       return;
     }
     const photos = r[phase + 'Photos'] || (r[phase + 'Photos'] = {});
-    const rooms = roomsFor(r.villaId).map(room => {
+    const rooms = capRooms(r, phase).map(room => {
       const list = photos[room.id] || [];
+      const busy = BUSY.has(`${r.id}:${phase}:${room.id}`);
       const ref = phase === 'out' ? (r.inPhotos[room.id] || []) : [];
-      const refHtml = phase === 'out'
-        ? `<div class="note">${T('Foto check-in', 'Check-in photos')}</div><div class="refstrip">${ref.length ? ref.map(pid => phImg(pid, 'Check-in')).join('') : phEmpty(T('contoh', 'sample'))}</div>`
-        : '';
-      return `<section class="room">
-        <h3>${esc(roomName(room.id, L()))} ${list.length ? chip('ok', `${list.length} ${T('foto', 'photos')}`) : chip('', T('belum ada foto', 'no photos yet'))}</h3>
+      const refHtml = phase === 'out' ? `<div class="note">Foto check-in</div><div class="refstrip">${ref.length ? ref.map(pid => phImg(pid, 'Check-in')).join('') : phEmpty('contoh')}</div>` : '';
+      const body = busy
+        ? `<div class="aibusy"><div class="spin sm" aria-hidden="true"></div><span>AI sedang membaca foto ${esc(roomName(room.id, 'id'))}…</span></div>`
+        : phase === 'in' ? ((r.inItems || {})[room.id] ? staffInTable(r, room.id) : `<button class="add" data-act="addItem" data-room="${room.id}">+ Tambah barang manual (tanpa foto)</button>`) : staffOutTable(r, room.id);
+      return `<section class="room" id="room-${room.id}">
+        <h3>${esc(roomName(room.id, 'id'))} ${list.length ? chip('ok', `${list.length} foto`) : chip('', 'belum ada foto')}</h3>
         ${refHtml}
         <div class="pick2">
-          <label class="btn filebtn">📷 ${T('Ambil foto', 'Take photo')}<input type="file" accept="image/*" capture="environment" data-room="${room.id}" aria-label="${T('Ambil foto', 'Take photo')} ${esc(roomName(room.id, L()))}"></label>
-          <label class="btn ghost filebtn">${T('Pilih dari galeri', 'Choose files')}<input type="file" accept="image/*" multiple data-room="${room.id}" aria-label="${T('Pilih dari galeri', 'Choose files')} ${esc(roomName(room.id, L()))}"></label>
+          <label class="btn filebtn">📷 Ambil foto<input type="file" accept="image/*" capture="environment" data-room="${room.id}" aria-label="Ambil foto ${esc(roomName(room.id, 'id'))}"></label>
+          <label class="btn ghost filebtn">Pilih dari galeri<input type="file" accept="image/*" multiple data-room="${room.id}" aria-label="Pilih dari galeri ${esc(roomName(room.id, 'id'))}"></label>
         </div>
-        ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, L()))}<span class="old" data-old="${pid}" hidden>${T('Foto lama', 'Old photo')}</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="${T('Hapus foto', 'Remove photo')}">×</button></div>`).join('')}</div>` : ''}
+        ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, 'id'))}<span class="old" data-old="${pid}" hidden>Foto lama</span><span class="dark" data-dark="${pid}" hidden>Terlalu gelap</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="Hapus foto">×</button></div>`).join('')}</div>` : ''}
+        <div class="banner rd" data-darkmsg="${room.id}" hidden>Foto terlalu gelap, AI tidak bisa membacanya. Nyalakan lampu atau buka tirai, lalu ambil ulang. Hapus foto yang gelap.</div>
+        ${body}
       </section>`;
     }).join('');
     const total = count(photos);
+    const dKey = phase === 'in' ? 'invDate' : 'outInvDate';
     app.innerHTML = `<div class="page narrow">
-      <a href="${home}">← ${T('Kembali', 'Back')}</a>
-      <div class="head"><div><p class="eyebrow">${phase === 'in' ? 'Check-in' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
-      <p class="sub">${T('Ambil foto setiap ruangan. Bisa langsung di villa, atau nanti dari kantor lewat galeri.', 'Photograph each room. Live at the villa, or later from the office by choosing files.')}</p>
-      ${phase === 'out' ? `<div class="banner">${T('Ambil foto dari sudut yang sama dengan foto check-in.', 'Take each photo from the same angle as the check-in photo.')}</div>` : ''}
+      <a href="${home}">← Kembali</a>
+      <div class="head"><div><p class="eyebrow">${phase === 'in' ? 'Inventaris check-in' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
+      <div class="card"><div class="fld"><label for="f-inv">Tanggal inventaris</label><input id="f-inv" type="date" data-f="${dKey}" value="${esc(r[dKey] || '')}"></div>
+        <p class="note">${phase === 'in' ? 'Boleh berbeda dengan tanggal check-in penyewa.' : 'Tanggal pengecekan saat check-out.'}</p></div>
+      <p class="sub">Ambil foto setiap ruangan. AI langsung membuat daftar barang di ruangan itu, lalu kamu cek dan perbaiki sebelum dikirim ke manajer.</p>
+      ${phase === 'out' ? `<div class="banner">Ambil foto dari sudut yang sama dengan foto check-in.</div>` : ''}
       <p class="note" id="busy" hidden></p>
       ${rooms}
-      <div class="card addroom">
-        <h3>${T('Ruangan lain?', 'Another room?')}</h3>
-        <div class="row"><input id="newRoom" placeholder="${T('mis. Kamar 4, Teras, Kamar mandi luar', 'e.g. Bedroom 4, Terrace, Outdoor bathroom')}" aria-label="${T('Nama ruangan', 'Room name')}"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ ${T('Tambah ruangan', 'Add room')}</button></div>
-      </div>
+      ${phase === 'in' ? `<div class="card addroom">
+        <h3>Tambah ruangan atau barang lain-lain</h3>
+        <div class="sugg">${ROOM_SUGGEST.filter(([en]) => !roomsFor(r.villaId).some(x => x.en === en)).map(([en, idn]) => `<button class="chipbtn" data-act="addRoom" data-v="${r.villaId}" data-name="${en}" data-name-id="${idn}">+ ${idn}</button>`).join('')}</div>
+        <div class="row"><input id="newRoom" placeholder="Nama ruangan lain, mis. Kamar 4" aria-label="Nama ruangan"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Tambah</button></div>
+        <p class="note">Ruangan baru tersimpan untuk villa ini dan muncul lagi di check-in dan check-out berikutnya.</p>
+      </div>` : ''}
       <div class="sticky">
         <p class="err" id="sendErr" hidden></p>
-        <button class="btn block" data-act="send" data-r="${r.id}">${T(`Kirim ${total} foto`, `Send ${total} photos`)}</button>
+        <button class="btn block" data-act="send" data-r="${r.id}">Kirim ke manajer (${total} foto)</button>
       </div>
     </div>`;
     confirmMissing = false;
-    // mark old photos once loaded
-    Object.values(photos).flat().forEach(async pid => { const p = await getPhoto(pid); if (p && p.old) { const el = app.querySelector(`[data-old="${pid}"]`); if (el) el.hidden = false; } });
+    Object.entries(photos).forEach(([room, ids]) => ids.forEach(async pid => {
+      const p = await getPhoto(pid); if (!p) return;
+      if (p.old) { const el = app.querySelector(`[data-old="${pid}"]`); if (el) el.hidden = false; }
+      if (p.dark) { const el = app.querySelector(`[data-dark="${pid}"]`); if (el) el.hidden = false; const m = app.querySelector(`[data-darkmsg="${room}"]`); if (m) m.hidden = false; }
+    }));
   }
 
   async function addPhotos(input) {
     const r = rec(location.hash.split('/')[3]);
     if (!r) return;
-    const phase = r.status === 'in_draft' ? 'in' : 'out';
+    const phase = phaseOf(r);
     const room = input.dataset.room;
     const files = Array.from(input.files || []);
     if (!files.length) return;
     const busy = document.getElementById('busy');
-    let oldN = 0;
+    let oldN = 0, darkN = 0;
     for (let i = 0; i < files.length; i++) {
-      if (busy) { busy.hidden = false; busy.textContent = T(`Memproses foto ${i + 1} dari ${files.length}…`, `Processing photo ${i + 1} of ${files.length}…`); }
+      if (busy) { busy.hidden = false; busy.textContent = `Memproses foto ${i + 1} dari ${files.length}…`; }
       try {
         const p = await compress(files[i]);
         if (p.old) oldN++;
+        if (p.dark) darkN++;
         const id = uid();
         PC.set(id, p); await IDB.put(id, p);
         (r[phase + 'Photos'][room] = r[phase + 'Photos'][room] || []).push(id);
         save();
-      } catch (e) { toast(T('Satu foto tidak bisa dibaca. Coba foto JPG atau PNG.', 'One photo could not be read. Try a JPG or PNG.')); }
+      } catch (e) { toast('Satu foto tidak bisa dibaca. Coba foto JPG atau PNG.'); }
     }
-    render(true);
-    if (oldN) toast(T(`${oldN} foto diambil lebih dari 24 jam lalu. Ditandai "Foto lama".`, `${oldN} photo(s) taken more than 24 hours ago. Marked "Old photo".`));
+    if (darkN) toast(`${darkN} foto terlalu gelap. Ambil ulang dengan cahaya lebih terang.`);
+    else if (oldN) toast(`${oldN} foto diambil lebih dari 24 jam lalu. Ditandai "Foto lama".`);
+    const good = await goodPhotos(r[phase + 'Photos'][room]);
+    const needAi = good.length && (phase === 'in' ? !(r.inItems || {})[room] : ((r.outItems || {})[room] || [{}])[0].unchecked);
+    if (!needAi) { render(true); return; }
+    const key = `${r.id}:${phase}:${room}`;
+    BUSY.add(key); render(true);
+    const sec = document.getElementById('room-' + room); if (sec) sec.scrollIntoView({ block: 'nearest' });
+    setTimeout(() => {
+      BUSY.delete(key);
+      if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room);
+      save();
+      if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(phase === 'in' ? `AI selesai: ${roomName(room, 'id')}. Cek daftarnya.` : `AI selesai mencocokkan ${roomName(room, 'id')}.`); }
+    }, 1600);
   }
 
   async function sendPhotos(r) {
-    const phase = r.status === 'in_draft' ? 'in' : 'out';
+    const phase = phaseOf(r);
     const photos = r[phase + 'Photos'];
     const err = document.getElementById('sendErr');
     const total = count(photos);
-    if (!total) { err.hidden = false; err.textContent = T('Tambahkan minimal satu foto.', 'Add at least one photo.'); return; }
-    const missing = roomsFor(r.villaId).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id, L()));
+    if (!total) { err.hidden = false; err.textContent = 'Tambahkan minimal satu foto.'; return; }
+    for (const ids of Object.values(photos)) { for (const pid of ids) { const p = await getPhoto(pid); if (p && p.dark) { err.hidden = false; err.textContent = 'Masih ada foto yang terlalu gelap. Hapus foto itu (tanda merah) atau ambil ulang dulu.'; return; } } }
+    if (phase === 'in') {
+      const blank = Object.values(r.inItems || {}).some(l => l.some(i => !i.name.trim()));
+      if (blank) { err.hidden = false; err.textContent = 'Ada barang tanpa nama. Isi atau hapus.'; return; }
+      if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'Daftar barang masih kosong. Tunggu AI selesai atau tambah barang.'; return; }
+    }
+    const missing = capRooms(r, phase).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id, 'id'));
     if (missing.length && !confirmMissing) {
       confirmMissing = true;
       err.hidden = false;
-      err.textContent = T(`Belum ada foto: ${missing.join(', ')}. Tekan sekali lagi untuk tetap kirim.`, `No photos yet for: ${missing.join(', ')}. Press again to send anyway.`);
+      err.textContent = `Belum ada foto: ${missing.join(', ')}. Tekan sekali lagi untuk tetap kirim.`;
       return;
     }
-    const done = overlay(T(`Mengirim ${total} foto…`, `Sending ${total} photos…`));
-    await new Promise(res => setTimeout(res, 1200));
+    const done = overlay(`Mengirim ke manajer…`);
+    await new Promise(res => setTimeout(res, 1000));
     done();
     r.status = phase === 'in' ? 'checkin_pending' : 'checkout_pending';
     r[phase + 'SentAt'] = Date.now();
     save();
-    toast(T('Terkirim. Manajer akan memeriksa daftar dari AI.', 'Sent. The AI list is ready for review.'));
-    go(S.role === 'mgr' ? `#/mgr/rec/${r.id}` : '#/staff');
+    toast('Terkirim. Manajer tinggal memeriksa dan menyetujui.');
+    go('#/staff');
   }
 
   /* ---------- manager home ---------- */
   function statusMgr(r) {
     if (!r) return { chip: chip('', 'Empty'), act: '' };
     switch (r.status) {
-      case 'in_draft': return { chip: chip('', 'Check-in photos in progress'), act: `<a class="btn ghost sm" href="#/mgr/capture/${r.id}">Open photos</a>` };
+      case 'in_draft': return { chip: chip('', 'Staff checking inventory'), act: '' };
       case 'checkin_pending': return { chip: chip('am', 'Check-in to review'), act: `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` };
       case 'occupied': {
         const d = daysUntil(r.checkOut);
         const due = d <= 7 ? ' ' + chip('am', d < 0 ? 'Check-out overdue' : d === 0 ? 'Check-out today' : `Check-out in ${d} days`) : '';
         return { chip: chip('ok', 'Occupied') + due, act: `<a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a>` };
       }
-      case 'out_draft': return { chip: chip('', 'Check-out photos in progress'), act: `<a class="btn ghost sm" href="#/mgr/capture/${r.id}">Open photos</a>` };
+      case 'out_draft': return { chip: chip('', 'Staff checking check-out'), act: '' };
       case 'checkout_pending': return { chip: chip('am', 'Check-out to review'), act: `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` };
     }
     return { chip: '', act: '' };
@@ -400,7 +467,7 @@
       <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Check-in PDF</button><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="out">Check-out PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`; }).join('')}
       </table></div>` : '<p class="note">Completed check-outs will appear here.</p>';
     app.innerHTML = `<div class="page">
-      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ New check-in</a></div></div>
+      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add villa</a></div></div>
       <div class="grid2">
         <div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
         <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">In the live system an email goes to the manager 7 days before each check-out.</p></div>
@@ -414,57 +481,44 @@
   }
 
   function viewNew() {
-    const empty = S.villas.filter(v => !activeRec(v.id));
     app.innerHTML = `<div class="page narrow">
       <a href="#/mgr">← Villas</a>
-      <div class="head"><div><p class="eyebrow">New check-in</p><h1>Choose the villa</h1></div></div>
-      <p class="sub">Usually staff start the check-in on their phone at the villa. You can also start it here and upload photos from the office.</p>
-      <div class="vlist">${empty.length ? empty.map(v => `<div class="villa"><div class="top"><b>${esc(v.name)}</b>${chip('', 'Empty')}</div><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`).join('') : '<p class="note">Every villa already has a lease in progress.</p>'}</div>
+      <div class="head"><div><p class="eyebrow">Setup</p><h1>Add a villa</h1></div></div>
+      <p class="sub">Staff start each inventory on their phone at the villa. Rooms are added by staff during the first inventory.</p>
       <div class="card">
-        <h3>Add a villa</h3>
         <div class="fld"><label for="newVilla">Villa name</label><input id="newVilla" placeholder="e.g. Villa Matahari"></div>
         <p class="err" id="nvErr" hidden></p>
-        <button class="btn ghost" data-act="addVilla">Add villa</button>
+        <button class="btn" data-act="addVilla">Add villa</button>
       </div>
     </div>`;
   }
 
-  /* ---------- simulated AI ---------- */
-  function simIn(r) {
-    const items = {};
-    roomsFor(r.villaId).forEach(room => {
-      if (!(r.inPhotos[room.id] || []).length) return;
-      if (!CAT[room.id]) { items[room.id] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: rename or remove', src: 'ai', flag: '' }]; return; }
-      items[room.id] = CAT[room.id].filter(([n]) => !HIDDEN.has(n)).map(([name, qty]) => ({
-        id: uid(), name, qty, cond: name === 'Wine glasses' ? 'Damaged' : 'Good', note: name === 'Wine glasses' ? '1 cracked' : '',
-        src: 'ai', flag: SMALL.has(name) ? 'small' : ''
-      }));
-    });
-    r.inItems = items;
+  /* ---------- simulated AI (per room) ---------- */
+  function simInRoom(r, roomId) {
+    r.inItems = r.inItems || {};
+    if (!CAT[roomId]) { r.inItems[roomId] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: rename or remove', src: 'ai', flag: '' }]; return; }
+    r.inItems[roomId] = CAT[roomId].filter(([n]) => !HIDDEN.has(n)).map(([name, qty]) => ({
+      id: uid(), name, qty, cond: name === 'Wine glasses' ? 'Damaged' : 'Good', note: name === 'Wine glasses' ? '1 cracked' : '',
+      src: 'ai', flag: SMALL.has(name) ? 'small' : ''
+    }));
   }
-  function simOut(r) {
+  function initOut(r) {
     const out = {};
     Object.keys(r.inItems || {}).forEach(roomId => {
-      const has = (r.outPhotos[roomId] || []).length > 0;
       out[roomId] = r.inItems[roomId].map(i => ({
         id: uid(), name: i.name, inQty: i.qty, inCond: i.cond, inNote: i.note || '',
-        qty: i.qty, cond: i.cond, note: has ? '' : 'No check-out photo', unchecked: !has, touched: false
+        qty: i.qty, cond: i.cond, note: 'No check-out photo', unchecked: true, touched: false
       }));
     });
-    let applied = 0;
-    const tweak = (room, name, fn) => {
-      if (!(r.outPhotos[room] || []).length || !out[room]) return;
-      const it = out[room].find(x => x.name === name); if (!it) return;
-      fn(it); applied++;
-    };
+    r.outItems = out;
+  }
+  function simOutRoom(r, roomId) {
+    const list = (r.outItems || {})[roomId]; if (!list) return;
+    list.forEach(it => { it.unchecked = false; if (it.note === 'No check-out photo') it.note = ''; });
+    const tweak = (room, name, fn) => { if (room !== roomId) return; const it = list.find(x => x.name === name); if (it) fn(it); };
     tweak('bed1', 'Pillows with cover', it => { it.qty = Math.max(0, it.inQty - 1); });
     tweak('bed1', 'Bed runner', it => { it.cond = 'Damaged'; it.note = 'Stain'; });
     tweak('bed2', 'White towels', it => { it.cond = 'Worn'; });
-    if (!applied) {
-      const room = Object.keys(out).find(k => (r.outPhotos[k] || []).length);
-      if (room) { const it = out[room].find(x => x.inQty > 1) || out[room][0]; if (it.inQty > 0) it.qty = it.inQty - 1; }
-    }
-    r.outItems = out;
   }
   function result(it) {
     if (it.unchecked && !it.touched) return { k: 'gy', t: 'Not photographed' };
@@ -481,41 +535,11 @@
     return list;
   }
 
-  function aiLoad(r, phase) {
-    const tok = viewToken;
-    const n = count(r[phase + 'Photos']);
-    const steps = phase === 'in'
-      ? ['Finding the rooms…', 'Listing the items…', 'Counting…', 'Checking condition…']
-      : ['Matching rooms with check-in…', 'Checking each item on the list…', 'Looking for missing items…', 'Checking condition…'];
-    app.innerHTML = `<div class="page narrow"><div class="card loader">
-      <div class="spin" aria-hidden="true"></div>
-      <h2 style="font-family:var(--display);font-size:22px">${phase === 'in' ? `AI is reading ${n} photo${n === 1 ? '' : 's'}` : `AI is comparing ${n} new photo${n === 1 ? '' : 's'} with the check-in list`}</h2>
-      <div class="pbar"><i id="pb"></i></div><p class="note" id="ps">${steps[0]}</p>
-      <p class="note">Demo: results are simulated from the Villa Madya 1 list.</p>
-    </div></div>`;
-    let i = 0;
-    const iv = setInterval(() => {
-      if (tok !== viewToken) { clearInterval(iv); return; }
-      i++;
-      const pb = document.getElementById('pb'); const ps = document.getElementById('ps');
-      if (pb) pb.style.width = Math.min(100, i * 9) + '%';
-      if (ps) ps.textContent = steps[Math.min(steps.length - 1, Math.floor(i / 3))];
-      if (i >= 12) {
-        clearInterval(iv);
-        if (phase === 'in') simIn(r); else simOut(r);
-        save();
-        render();
-      }
-    }, 220);
-  }
-
   /* ---------- record views ---------- */
   function viewRecord(id) {
     const r = rec(id);
     if (!r) { go('#/mgr'); return; }
-    if (r.status === 'in_draft' || r.status === 'out_draft') { go(`#/mgr/capture/${r.id}`); return; }
-    if (r.status === 'checkin_pending' && !r.inItems) { aiLoad(r, 'in'); return; }
-    if (r.status === 'checkout_pending' && !r.outItems) { aiLoad(r, 'out'); return; }
+    if (r.status === 'in_draft' || r.status === 'out_draft') { toast('Staff are still checking this villa.'); go('#/mgr'); return; }
     if (r.status === 'checkin_pending' || r.status === 'occupied') viewCheckIn(r);
     else viewCheckOut(r);
   }
@@ -540,15 +564,13 @@
             <td><input class="q" type="number" min="0" data-k="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Quantity"></td>
             <td><select data-k="cond" data-room="${k}" data-iid="${it.id}" aria-label="Condition">${CONDS.map(c => `<option${c === it.cond ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
             <td><input data-k="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note"></td>
-            <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Added' : 'Edited'}</span></td>
-            <td><button class="del" data-act="delItem" data-room="${k}" data-iid="${it.id}" aria-label="Remove item">✕</button></td></tr>`
+            <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Added by staff' : 'Edited'}</span></td></tr>`
         : `<tr><td>${esc(it.name)}</td><td class="num">${it.qty}</td><td>${it.cond === 'Good' ? it.cond : chip(it.cond === 'Damaged' ? 'rd' : 'wr', it.cond)}</td><td class="note">${esc(it.note)}</td></tr>`).join('');
       return `<div class="rblock">
         <div class="ph">${photoCol(r.inPhotos[k], 'Check-in', 6)}</div>
         <div style="min-width:0;display:flex;flex-direction:column">
           <h3>${esc(roomName(k, 'en'))} ${chip('', `${list.length} items`)}</h3>
-          <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th>${edit ? '<th>Source</th><th></th>' : ''}</tr>${rowsHtml || `<tr><td colspan="6" class="note">No items.</td></tr>`}</table></div>
-          ${edit ? `<button class="add" data-act="addItem" data-room="${k}">+ Add item</button>` : ''}
+          <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th>${edit ? '<th>Source</th>' : ''}</tr>${rowsHtml || `<tr><td colspan="6" class="note">No items.</td></tr>`}</table></div>
         </div>
       </div>`;
     }).join('');
@@ -566,21 +588,20 @@
         <div class="fld"><label for="f-email">Email <span class="opt">optional</span></label><input id="f-email" type="email" data-f="email" value="${esc(r.email)}" placeholder="tenant@email.com" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-idno">Passport / ID no. <span class="opt">optional</span></label><input id="f-idno" data-f="idNo" value="${esc(r.idNo)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-notes">Notes <span class="opt">optional</span></label><input id="f-notes" data-f="notes" value="${esc(r.notes)}" placeholder="e.g. deposit amount, agent" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="invDate" value="${esc(r.invDate)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-in">Check-in date</label><input id="f-in" type="date" data-f="checkIn" value="${esc(r.checkIn)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>
       </div></div>
       ${edit ? `<p class="note">Agreement codes come from the manager's agreement Google Sheet. A code already used on another record is hidden.</p>` : ''}
-      ${edit ? `<div class="banner ai"><b>AI listed ${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'} from ${nPh} photo${nPh === 1 ? '' : 's'}.</b> Items marked <span class="warnico">⚠</span> are small items: please check the count. AI cannot see hidden things, such as a mattress protector under the sheet. Add them with "+ Add item".</div>` : ''}
+      ${edit ? `<div class="banner ai"><b>${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'}, listed by AI from ${nPh} photo${nPh === 1 ? '' : 's'} and checked by staff.</b> Correct anything that is wrong, then approve. Items marked <span class="warnico">⚠</span> are small items.</div>` : ''}
       ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}.</div>` : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
       ${blocks}
-      ${edit ? `<div class="card addroom"><h3>Add a room</h3><div class="row"><input id="newRoom" placeholder="e.g. Bedroom 4, Terrace" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}" data-r="${r.id}">+ Add room</button></div><p class="note">The room is saved for this villa, so it appears at every future check-in and check-out.</p></div>` : ''}
       <div class="actions">
         <div>${edit ? '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" id="apErr" hidden></p></div>
         <div class="row">
           ${edit ? `<button class="btn" data-act="approveIn" data-r="${r.id}">✓ Approve check-in</button>` : ''}
           <button class="btn ${edit ? 'ghost' : ''}" data-act="pdf" data-r="${r.id}" data-ph="in" ${edit ? 'disabled title="Available after approval"' : ''}>📄 Generate PDF</button>
-          ${r.status === 'occupied' ? `<button class="btn ghost" data-act="startOut" data-r="${r.id}">Start check-out</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -619,8 +640,8 @@
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-out review' : 'Check-out · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
-      <p class="sub">Agreement <b>${esc(r.agreement || '—')}</b> · Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)}</p>
-      ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the approved check-in list (${nItems} items).</b> ${ch.length} change${ch.length === 1 ? '' : 's'} found. Confirm or correct each one. Items already damaged at check-in are not counted again.</div>` : ''}
+      <p class="sub">Agreement <b>${esc(r.agreement || '—')}</b> · Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)} · Check-out inventory ${fmt(r.outInvDate)}</p>
+      ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the check-in list (${nItems} items) and staff checked the result.</b> ${ch.length} change${ch.length === 1 ? '' : 's'}. Correct if needed, then approve. Items already damaged at check-in are not counted again.</div>` : ''}
       ${unchecked.length ? `<div class="banner am">No check-out photos for: ${esc(unchecked.join(', '))}. Those items are marked "Not photographed".</div>` : ''}
       <div class="card"><h3>Changes since check-in</h3>
         <div class="tbl"><table class="vt itbl"><tr><th>Item</th><th>Room</th><th>Check-in</th><th>Qty</th><th>Condition</th><th>Result</th><th>Note</th></tr>${chRows}</table></div>
@@ -664,16 +685,19 @@
       // meta
       doc.setFontSize(10);
       const meta = [['Agreement', r.agreement || '-'], ['Villa', v.name], ['Tenant', r.tenant || '-'], ['Check-in', fmt(r.checkIn)], ['Check-out', fmt(r.checkOut)],
-        ['Approved', fmt(iso(new Date(phase === 'in' ? r.inApprovedAt : r.outApprovedAt || Date.now())))], ['Approved by', 'Manager']];
+      ];
+      const invD = phase === 'in' ? r.invDate : r.outInvDate, refD = phase === 'in' ? r.checkIn : r.checkOut;
+      if (invD && invD !== refD) meta.push([phase === 'in' ? 'Inventory date' : 'Check-out inventory', fmt(invD)]);
       if (r.phone) meta.push(['Phone', r.phone]);
       if (r.email) meta.push(['Email', r.email]);
       if (r.idNo) meta.push(['ID no.', r.idNo]);
       meta.forEach((m, i) => {
         const x = i % 2 === 0 ? M : W / 2; const yy = y + Math.floor(i / 2) * 6;
-        doc.setFont('helvetica', 'bold'); doc.text(`${m[0]}:`, x, yy); doc.setFont('helvetica', 'normal'); doc.text(String(m[1]), x + 24, yy);
+        doc.setFont('helvetica', 'bold'); doc.text(`${m[0]}:`, x, yy); const lw = doc.getTextWidth(`${m[0]}:`); doc.setFont('helvetica', 'normal'); doc.text(String(m[1]), x + Math.max(24, lw + 3), yy);
       });
       y += Math.ceil(meta.length / 2) * 6 + 4;
-      const photoRow = async (ids, label, maxN) => {
+      const photoRow = async (ids0, label, maxN) => {
+        const ids = await goodPhotos(ids0);
         const n = Math.max(1, Math.min(maxN, ids.length || 1)); const gap = 3;
         const bw = (W - 2 * M - gap * (maxN - 1)) / maxN, bh = bw * 0.75;
         need(bh + 8);
@@ -694,7 +718,8 @@
         y += bh + 5;
       };
       // check-in (left) vs check-out (right), up to 2 photos each, same row
-      const photoPair = async (inIds, outIds) => {
+      const photoPair = async (inIds0, outIds0) => {
+        const inIds = await goodPhotos(inIds0), outIds = await goodPhotos(outIds0);
         const gap = 3, mid = 6, half = (W - 2 * M - mid) / 2, bw = (half - gap) / 2, bh = bw * 0.75;
         need(bh + 9);
         doc.setFontSize(8); doc.setTextColor(...MUTED);
@@ -746,7 +771,7 @@
         }
       }
       // tenant acknowledgement + signatures
-      need(62); y += 6;
+      need(68); y += 6;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Tenant acknowledgement', M, y); y += 6;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
       const ack = phase === 'in'
@@ -755,10 +780,11 @@
       const lines = doc.splitTextToSize(ack, W - 2 * M); doc.text(lines, M, y); y += lines.length * 4.5 + 16;
       doc.setDrawColor(...DARK); doc.line(M, y, M + 75, y); doc.line(W - M - 75, y, W - M, y);
       doc.setFontSize(9); doc.setTextColor(...MUTED);
-      doc.text('Manager, GW Realty', M, y + 5); doc.text('Tenant', W - M - 75, y + 5);
-      doc.text('Name:', M, y + 11); doc.text(`Name: ${r.tenant || ''}`, W - M - 75, y + 11);
-      doc.text('Date:', M, y + 17); doc.text('Date:', W - M - 75, y + 17);
-      doc.setTextColor(...DARK); y += 22;
+      doc.text("Owner / Villa / Listing", M, y + 5); doc.text('Tenant', W - M - 75, y + 5);
+      doc.text("Owner's Representative", M, y + 10);
+      doc.text('Name:', M, y + 16); doc.text(`Name: ${r.tenant || ''}`, W - M - 75, y + 16);
+      doc.text('Date:', M, y + 22); doc.text('Date:', W - M - 75, y + 22);
+      doc.setTextColor(...DARK); y += 27;
       // headers on pages added by autoTable + footers
       const pages = doc.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
@@ -797,7 +823,7 @@
   });
   function findItem(list, iid) { return (list || []).find(i => i.id === iid); }
   function inEdit(t) {
-    const r = rec(location.hash.split('/')[3]); if (!r || r.status !== 'checkin_pending') return;
+    const r = rec(location.hash.split('/')[3]); if (!r || (r.status !== 'checkin_pending' && r.status !== 'in_draft')) return;
     const it = findItem(r.inItems[t.dataset.room], t.dataset.iid); if (!it) return;
     const k = t.dataset.k;
     it[k] = k === 'qty' ? Math.max(0, parseInt(t.value, 10) || 0) : t.value;
@@ -805,7 +831,7 @@
     save();
   }
   function outEdit(t, rerender) {
-    const r = rec(location.hash.split('/')[3]); if (!r || r.status !== 'checkout_pending') return;
+    const r = rec(location.hash.split('/')[3]); if (!r || (r.status !== 'checkout_pending' && r.status !== 'out_draft')) return;
     const it = findItem(r.outItems[t.dataset.room], t.dataset.iid); if (!it) return;
     const k = t.dataset.ok;
     it[k] = k === 'qty' ? Math.max(0, parseInt(t.value, 10) || 0) : t.value;
@@ -829,19 +855,19 @@
     }
     else if (act === 'delUser') { S.users = S.users.filter(u => u.id !== b.dataset.u); save(); render(true); }
     else if (act === 'addRoom') {
-      const inp = document.getElementById('newRoom'); const name = inp ? inp.value.trim() : '';
+      const inp = document.getElementById('newRoom'); const name = b.dataset.name || (inp ? inp.value.trim() : '');
       if (!name) { toast(T('Ketik nama ruangan dulu.', 'Type the room name first.')); return; }
       const v = villa(b.dataset.v); v.rooms = v.rooms || [];
       if (roomsFor(v.id).some(x => x.en.toLowerCase() === name.toLowerCase())) { toast(T('Ruangan ini sudah ada.', 'This room already exists.')); return; }
-      const room = { id: 'rm-' + uid(), en: name, id_: name }; v.rooms.push(room);
+      const room = { id: 'rm-' + uid(), en: name, id_: b.dataset.nameId || name }; v.rooms.push(room);
       if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) r.inItems[room.id] = []; }
-      save(); toast(T(`${name} ditambahkan.`, `${name} added.`)); render(true);
+      save(); toast(T(`${room.id_} ditambahkan. Ambil foto atau tambah barang.`, `${name} added.`)); render(true);
     }
     else if (act === 'startIn') {
-      const r = { id: uid(), villaId: b.dataset.v, tenant: '', checkIn: iso(today()), checkOut: '', status: 'in_draft', inPhotos: {}, inItems: null, outPhotos: {}, outItems: null, createdAt: Date.now() };
+      const r = { id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() };
       S.records.push(r); save(); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
     }
-    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outItems = null; save(); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`); }
+    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); go(`#/staff/capture/${r.id}`); }
     else if (act === 'rmPhoto') {
       const r = rec(location.hash.split('/')[3]); const phase = r.status === 'in_draft' ? 'in' : 'out';
       const l = r[phase + 'Photos'][b.dataset.room] || []; const i = l.indexOf(b.dataset.pid);
@@ -855,7 +881,7 @@
       save(); render(true);
     }
     else if (act === 'addItem') {
-      const r = rec(location.hash.split('/')[3]); const it = { id: uid(), name: '', qty: 1, cond: 'Good', note: '', src: 'added', flag: '' };
+      const r = rec(location.hash.split('/')[3]); r.inItems = r.inItems || {}; const it = { id: uid(), name: '', qty: 1, cond: 'Good', note: '', src: 'added', flag: '' };
       (r.inItems[b.dataset.room] = r.inItems[b.dataset.room] || []).push(it); save(); render(true);
       const inp = app.querySelector(`input[data-iid="${it.id}"][data-k="name"]`); if (inp) inp.focus();
     }
