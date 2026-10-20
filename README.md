@@ -16,7 +16,11 @@ A clickable demo of the villa inventory system for GW Realty, built by Kriyator.
 
 Staff screens are in Indonesian; manager screens and PDFs are in English.
 
-## Demo limits
+## Live mode (n8n)
+
+Set `base` and `key` in `config.js` to connect to the n8n workflows in `n8n/` (setup steps in `n8n/README.md`). The badge shows TEST instead of DEMO; AI is real (Claude Haiku 5.5), records and photos sync across devices through Google Sheets and Drive, PDFs are saved to Drive, and agreement codes come from the agreement sheet.
+
+## Demo limits (when config.js is empty)
 
 - **AI is simulated.** Results come from the Villa Madya 1 item list (`data.js`), not from the photos.
 - **Nothing is sent anywhere.** Records stay in the browser (localStorage), photos in IndexedDB. Each browser has its own data. "Reset demo" on the manager page starts again.

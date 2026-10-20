@@ -1,0 +1,136 @@
+{
+  "name": "GW Inventory \u00b7 7 Check-out reminder (daily)",
+  "nodes": [
+    {
+      "id": "0f51b5ea-9fc0-4097-81b9-8a0ef90fbfda",
+      "name": "Every day 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dc5632da-47d0-40e8-9bfc-fdebc743e6f0",
+      "name": "Read records",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1FQVjGMDsfclRry2yFBoydGdv5-QhhnDaDzAmPc9A8ac",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "6dd504da-f5fa-497a-a40d-4593afe4c8b6",
+      "name": "Due in 7 days",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Find leases whose check-out is exactly 7 days from today (Bali time) and build one email.\nconst TZ = 'Asia/Makassar';\nconst fmt = d => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);\nconst target = fmt(new Date(Date.now() + 7 * 864e5));\nconst due = $input.all().map(i => i.json).filter(r => r.status === 'occupied' && String(r.checkOut).slice(0, 10) === target);\nif (!due.length) return [];\nconst lines = due.map(r => `- ${r.villa} \u00b7 agreement ${r.agreement || '-'} \u00b7 tenant ${r.tenant || '-'} \u00b7 check-out ${r.checkOut}`).join('\\n');\nreturn [{ json: {\n  subject: `Check-out in 7 days: ${due.length} villa${due.length > 1 ? 's' : ''} (${target})`,\n  text: `These leases check out on ${target}:\\n\\n${lines}\\n\\nPlease schedule the check-out inventory with staff.\\n\\nGW Realty Inventory`\n} }];\n"
+      }
+    },
+    {
+      "id": "8426979f-06fd-40ab-a279-f97a12a52a91",
+      "name": "Email manager",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "sendTo": "manager@example.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every day 08:00": {
+      "main": [
+        [
+          {
+            "node": "Read records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read records": {
+      "main": [
+        [
+          {
+            "node": "Due in 7 days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Due in 7 days": {
+      "main": [
+        [
+          {
+            "node": "Email manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

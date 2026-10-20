@@ -1,0 +1,135 @@
+{
+  "name": "GW Inventory \u00b7 3 List records",
+  "nodes": [
+    {
+      "id": "9cf51055-d3ea-433c-bf37-301955cfd481",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "662f76e4-2190-455f-837a-f49a54be53eb",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gw-records",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GW Inventory key"
+        }
+      }
+    },
+    {
+      "id": "838ec836-317b-433a-ae95-f1390a67fe70",
+      "name": "Read records",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1FQVjGMDsfclRry2yFBoydGdv5-QhhnDaDzAmPc9A8ac",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "dee5ba34-e92f-4408-8282-5e12b3d9d057",
+      "name": "Parse records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Return every record (parsed from dataJson), newest first.\nconst rows = $input.all().map(i => i.json).filter(r => r.dataJson);\nconst records = [];\nfor (const row of rows) { try { records.push(JSON.parse(row.dataJson)); } catch (e) { /* skip broken row */ } }\nrecords.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));\nreturn [{ json: { ok: true, records } }];\n"
+      }
+    },
+    {
+      "id": "871e59b0-6257-4145-8e56-98cc73a17740",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read records": {
+      "main": [
+        [
+          {
+            "node": "Parse records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse records": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

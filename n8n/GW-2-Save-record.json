@@ -1,0 +1,372 @@
+{
+  "name": "GW Inventory \u00b7 2 Save record + photos",
+  "nodes": [
+    {
+      "id": "5dd3c1d9-fff0-4653-a086-07bc3b7d9358",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "ddb5ffea-95f8-419c-91b6-3d4ecb98f5fb",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gw-save-record",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GW Inventory key"
+        }
+      }
+    },
+    {
+      "id": "66109eed-4416-4e26-ba1d-6635e389e695",
+      "name": "Photos to files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Input: { record: {...}, photos: [{ id, phase, room, data: \"<base64 jpeg>\" }] }\n// Output: one item per photo with binary \"data\", or one marker item if there are no new photos.\nconst b = $input.first().json.body || {};\nconst r = b.record || {};\nif (!r.id) throw new Error('record.id is required');\nconst photos = Array.isArray(b.photos) ? b.photos : [];\nif (!photos.length) return [{ json: { none: true } }];\nreturn photos.map(p => ({\n  json: { photoId: p.id, phase: p.phase, room: p.room, fileName: `${r.agreement || r.id}_${p.phase}_${p.room}_${p.id}.jpg` },\n  binary: { data: { data: String(p.data).replace(/^data:image\\/\\w+;base64,/, ''), mimeType: 'image/jpeg', fileName: `${p.id}.jpg` } }\n}));\n"
+      }
+    },
+    {
+      "id": "fa92b93e-3f4d-40e3-afea-9c64b113eb8b",
+      "name": "Has photos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "8a1056e1-160f-462d-ac7a-7560035ff190",
+              "leftValue": "={{ $json.none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "notTrue",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e683f5aa-b494-4ee3-92b9-d8b55cd7fdd1",
+      "name": "Upload photo",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        660,
+        -100
+      ],
+      "parameters": {
+        "name": "={{ $json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1sU2RZhoij8tyj9XyYi-f4Cel_RqFjYEw",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "id": "ac59f0e1-4557-436a-bf92-d1fc3c6affed",
+      "name": "Build row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Build the Records sheet row. Photo file IDs from Google Drive are merged into record.photoFiles.\nconst b = $('Webhook').first().json.body || {};\nconst r = Object.assign({}, b.record || {});\nr.photoFiles = Object.assign({}, r.photoFiles || {});\nif ($('Upload photo').isExecuted) {\n  const meta = $('Photos to files').all().map(i => i.json);\n  $('Upload photo').all().forEach((it, i) => { const m = meta[i]; if (m && m.photoId && it.json.id) r.photoFiles[m.photoId] = it.json.id; });\n}\nr.updatedAt = new Date().toISOString();\nreturn [{ json: {\n  recordId: r.id, agreement: r.agreement || '', villa: r.villaName || r.villaId || '', tenant: r.tenant || '',\n  status: r.status || '', invDate: r.invDate || '', checkIn: r.checkIn || '', checkOut: r.checkOut || '',\n  outInvDate: r.outInvDate || '', updatedAt: r.updatedAt, dataJson: JSON.stringify(r),\n  _photoFiles: r.photoFiles\n} }];\n"
+      }
+    },
+    {
+      "id": "f05ea9c0-0188-4bf3-b0bc-de2c5f2a153d",
+      "name": "Upsert record",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1FQVjGMDsfclRry2yFBoydGdv5-QhhnDaDzAmPc9A8ac",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "recordId": "={{ $json.recordId }}",
+            "agreement": "={{ $json.agreement }}",
+            "villa": "={{ $json.villa }}",
+            "tenant": "={{ $json.tenant }}",
+            "status": "={{ $json.status }}",
+            "invDate": "={{ $json.invDate }}",
+            "checkIn": "={{ $json.checkIn }}",
+            "checkOut": "={{ $json.checkOut }}",
+            "outInvDate": "={{ $json.outInvDate }}",
+            "updatedAt": "={{ $json.updatedAt }}",
+            "dataJson": "={{ $json.dataJson }}"
+          },
+          "matchingColumns": [
+            "recordId"
+          ],
+          "schema": [
+            {
+              "id": "recordId",
+              "displayName": "recordId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "agreement",
+              "displayName": "agreement",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "villa",
+              "displayName": "villa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tenant",
+              "displayName": "tenant",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invDate",
+              "displayName": "invDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "checkIn",
+              "displayName": "checkIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "checkOut",
+              "displayName": "checkOut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "outInvDate",
+              "displayName": "outInvDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updatedAt",
+              "displayName": "updatedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "dataJson",
+              "displayName": "dataJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "18f010cf-d3d1-4ffe-a500-19a821321a05",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, recordId: $('Build row').first().json.recordId, photoFiles: $('Build row').first().json._photoFiles }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Photos to files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Photos to files": {
+      "main": [
+        [
+          {
+            "node": "Has photos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has photos?": {
+      "main": [
+        [
+          {
+            "node": "Upload photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload photo": {
+      "main": [
+        [
+          {
+            "node": "Build row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build row": {
+      "main": [
+        [
+          {
+            "node": "Upsert record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert record": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

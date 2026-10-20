@@ -1,0 +1,135 @@
+{
+  "name": "GW Inventory \u00b7 6 Save PDF",
+  "nodes": [
+    {
+      "id": "01f218e4-da2e-4daf-bc9c-fcc635a2231d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "817af8bd-352b-4c41-a8a9-5aef18d2f7ed",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gw-save-pdf",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GW Inventory key"
+        }
+      }
+    },
+    {
+      "id": "705c88d6-29e9-4e87-b206-2ffc24df5787",
+      "name": "PDF to file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!b.data || !b.fileName) throw new Error('fileName and data are required');\nreturn [{ json: { fileName: String(b.fileName).replace(/[^A-Za-z0-9._-]+/g, '-') }, binary: { data: { data: String(b.data).replace(/^data:application\\/pdf;base64,/, ''), mimeType: 'application/pdf', fileName: b.fileName } } }];"
+      }
+    },
+    {
+      "id": "54efad83-8173-4a23-b4dc-f3ff66f3e254",
+      "name": "Upload PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "name": "={{ $json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1kPicX8fy0Mo0kzpAy04oQfB9j-yC1gud",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "id": "68d23de6-6090-4bee-9075-4b99bb5015d0",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, fileId: $json.id, url: $json.webViewLink }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "PDF to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF to file": {
+      "main": [
+        [
+          {
+            "node": "Upload PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload PDF": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

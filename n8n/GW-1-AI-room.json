@@ -1,0 +1,165 @@
+{
+  "name": "GW Inventory \u00b7 1 AI per room",
+  "nodes": [
+    {
+      "id": "1cd96ccc-8cb1-4c2c-98d0-f14523b889eb",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "1a3de692-cb44-42a6-953e-d0458feb897e",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gw-ai-room",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GW Inventory key"
+        }
+      }
+    },
+    {
+      "id": "c9bbda8f-3ea2-42dc-8f89-097079c2d9a8",
+      "name": "Prepare request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Build the Claude request for one room. Input (POST JSON body):\n// { phase: \"in\"|\"out\", villa, room, photos: [\"<base64 jpeg>\", ...],\n//   expected: [[\"Bed frame\",1], ...]            (optional, check-in: villa amenity list for this room)\n//   checkin:  [{id, name, qty, cond}, ...]       (check-out: the approved check-in list for this room) }\nconst MODEL = 'claude-haiku-5-5';   // change to 'claude-sonnet-5-5' if Haiku misses too much\nconst MAX_PHOTOS = 4;\n\nconst b = $input.first().json.body || {};\nconst photos = (Array.isArray(b.photos) ? b.photos : []).slice(0, MAX_PHOTOS)\n  .map(p => String(p).replace(/^data:image\\/\\w+;base64,/, ''));\nif (!photos.length) throw new Error('No photos sent');\nconst phase = b.phase === 'out' ? 'out' : 'in';\n\nconst rules = `You check villa inventory from photos for a property manager in Bali.\nRules:\n- Only list movable items, furniture, appliances, linen, decor and kitchenware you can actually see. Do not list walls, floors, ceilings, windows, built-in fixtures.\n- Count at the level \"4 chairs\". If you cannot count reliably (cutlery, glasses, small items), give your best count and set \"small\": true.\n- Condition is one of: \"Good\", \"Worn\", \"Damaged\". Use \"Damaged\" only for visible damage (broken, cracked, torn, large stain) and say what in \"note\".\n- Never guess items you cannot see (inside closed cupboards, under bedding).\n- If the photos are too dark, blurry or do not show the room, set \"quality\" to \"retake\" and explain briefly in \"quality_note\".\nReply with JSON only, no other text.`;\n\nlet task;\nif (phase === 'in') {\n  const exp = Array.isArray(b.expected) && b.expected.length\n    ? `\\nThe villa's amenity list for this room (use these exact names when an item matches; still list other items you see):\\n${b.expected.map(([n, q]) => `- ${n} (${q})`).join('\\n')}`\n    : '';\n  task = `Room: ${b.room || 'unknown'} in ${b.villa || 'a villa'}.${exp}\nReturn: {\"quality\":\"ok\"|\"retake\",\"quality_note\":\"\",\"items\":[{\"name\":\"\",\"qty\":1,\"cond\":\"Good\",\"note\":\"\",\"small\":false}]}`;\n} else {\n  const list = (b.checkin || []).map(i => `- id ${i.id}: ${i.name}, qty ${i.qty}, ${i.cond}`).join('\\n');\n  task = `CHECK-OUT. Room: ${b.room || 'unknown'} in ${b.villa || 'a villa'}.\nThese items were recorded at check-in:\n${list}\nFor each check-in item, report what you see now. If an item is not visible in the photos, set \"seen\": false and keep the check-in qty and condition.\nReturn: {\"quality\":\"ok\"|\"retake\",\"quality_note\":\"\",\"items\":[{\"id\":\"\",\"qty\":1,\"cond\":\"Good\",\"note\":\"\",\"seen\":true}],\"extra\":[{\"name\":\"\",\"qty\":1,\"cond\":\"Good\",\"note\":\"\"}]}`;\n}\n\nconst content = photos.map(data => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } }));\ncontent.push({ type: 'text', text: task });\n\nreturn [{ json: { phase, body: { model: MODEL, max_tokens: 3000, system: rules, messages: [{ role: 'user', content }] } } }];\n"
+      }
+    },
+    {
+      "id": "443da196-7606-48d9-b17f-efc12c536144",
+      "name": "Claude API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Anthropic API key"
+        }
+      }
+    },
+    {
+      "id": "65999a14-cfde-4a88-baf0-06a81ea1f04b",
+      "name": "Parse reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Turn Claude's reply into clean JSON for the page.\nconst res = $input.first().json;\nconst phase = $('Prepare request').first().json.phase;\nconst text = (res.content || []).filter(c => c.type === 'text').map(c => c.text).join('');\nlet out;\ntry {\n  const m = text.match(/\\{[\\s\\S]*\\}/);\n  out = JSON.parse(m ? m[0] : text);\n} catch (e) {\n  return [{ json: { ok: false, error: 'AI reply was not valid JSON', raw: text.slice(0, 500) } }];\n}\nconst CONDS = ['Good', 'Worn', 'Damaged'];\nconst cond = c => CONDS.find(x => x.toLowerCase() === String(c || '').trim().toLowerCase()) || 'Good';\nconst items = (out.items || []).map(i => phase === 'in'\n  ? { name: String(i.name || '').slice(0, 80), qty: Math.max(0, parseInt(i.qty, 10) || 0), cond: cond(i.cond), note: String(i.note || '').slice(0, 120), small: !!i.small }\n  : { id: String(i.id || ''), qty: Math.max(0, parseInt(i.qty, 10) || 0), cond: cond(i.cond), note: String(i.note || '').slice(0, 120), seen: i.seen !== false });\nconst usage = res.usage || {};\nreturn [{ json: {\n  ok: true, phase,\n  quality: out.quality === 'retake' ? 'retake' : 'ok', quality_note: out.quality_note || '',\n  items, extra: phase === 'out' ? (out.extra || []) : undefined,\n  usage: { input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0, model: res.model }\n} }];\n"
+      }
+    },
+    {
+      "id": "7feb295b-5f09-4a4c-8a9f-90ebe9912ff6",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare request": {
+      "main": [
+        [
+          {
+            "node": "Claude API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude API": {
+      "main": [
+        [
+          {
+            "node": "Parse reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse reply": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

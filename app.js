@@ -74,6 +74,71 @@
   const rec = id => S.records.find(r => r.id === id);
   const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed');
 
+  /* ---------- n8n connection (live mode) ---------- */
+  const API = window.GW_API || {};
+  const LIVE = !!(API.base && API.key);
+  const b64 = dataUrl => String(dataUrl).split(',')[1] || '';
+  async function api(path, opts) {
+    opts = opts || {};
+    const res = await fetch(API.base.replace(/\/$/, '') + '/' + path, {
+      method: opts.method || 'GET',
+      headers: Object.assign({ 'X-GW-Key': API.key }, opts.body ? { 'Content-Type': 'application/json' } : {}),
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return opts.blob ? res.blob() : res.json();
+  }
+  async function pushRecord(r) {
+    if (!LIVE) return;
+    r.photoFiles = r.photoFiles || {};
+    const pending = [];
+    for (const ph of ['in', 'out']) for (const [room, ids] of Object.entries(r[ph + 'Photos'] || {})) for (const id of ids) {
+      if (r.photoFiles[id]) continue;
+      const p = await getPhoto(id);
+      if (p && !p.dark) pending.push({ id, phase: ph, room, data: b64(p.data) });
+    }
+    const send = async photos => {
+      const rec = Object.assign({}, r, { villaName: (villa(r.villaId) || {}).name || '' });
+      const res = await api('gw-save-record', { method: 'POST', body: { record: rec, photos } });
+      if (res && res.photoFiles) { r.photoFiles = Object.assign(r.photoFiles, res.photoFiles); save(); }
+    };
+    if (!pending.length) { await send([]); return; }
+    for (let i = 0; i < pending.length; i += 5) await send(pending.slice(i, i + 5));
+  }
+  async function pushSettings() {
+    if (!LIVE) return;
+    try { await api('gw-save-record', { method: 'POST', body: { record: { id: '_settings', status: 'settings', villas: S.villas, users: S.users }, photos: [] } }); }
+    catch (e) { toast('Could not save settings to the server. Check the connection.'); }
+  }
+  let lastPull = 0, pulling = false;
+  async function pullAll(force) {
+    if (!LIVE || pulling || (!force && Date.now() - lastPull < 15000)) return false;
+    pulling = true;
+    try {
+      const res = await api('gw-records');
+      const recs = (res && res.records) || [];
+      const st = recs.find(x => x.id === '_settings');
+      if (st) { if (Array.isArray(st.villas) && st.villas.length) S.villas = st.villas; if (Array.isArray(st.users) && st.users.length) S.users = st.users; }
+      else await pushSettings();
+      const server = recs.filter(x => x.id !== '_settings');
+      const local = S.records;
+      S.records = server.map(sr => { const lr = local.find(x => x.id === sr.id); return lr && (lr.status === 'in_draft' || lr.status === 'out_draft') && sr.status !== 'checkin_pending' && sr.status !== 'checkout_pending' && sr.status !== 'closed' ? lr : sr; })
+        .concat(local.filter(lr => !server.some(sr => sr.id === lr.id) && (lr.status === 'in_draft' || lr.status === 'out_draft')));
+      lastPull = Date.now(); save();
+      return true;
+    } catch (e) { toast('Server not reachable. Showing data saved on this device.'); lastPull = Date.now(); return false; }
+    finally { pulling = false; }
+  }
+  async function loadAgreements() {
+    if (!LIVE || S.agreementsAt && Date.now() - S.agreementsAt < 60000) return false;
+    try {
+      const res = await api('gw-agreements');
+      S.agreementData = (res.agreements || []);
+      S.agreements = S.agreementData.map(a => a.code);
+      S.agreementsAt = Date.now(); save(); return true;
+    } catch (e) { toast('Could not read the agreement sheet.'); return false; }
+  }
+
   /* ---------- photos (IndexedDB + memory cache) ---------- */
   const PC = new Map();
   const IDB = {
@@ -102,9 +167,26 @@
     del(id) { return this.tx('readwrite', s => s.delete(id)).catch(() => {}); },
     clear() { return this.tx('readwrite', s => s.clear()).catch(() => {}); }
   };
-  async function getPhoto(id) {
-    if (PC.has(id)) return PC.get(id);
-    const p = await IDB.get(id);
+  const INFLIGHT = new Map();
+  function getPhoto(id) {
+    if (PC.has(id)) return Promise.resolve(PC.get(id));
+    if (!INFLIGHT.has(id)) INFLIGHT.set(id, loadPhoto(id).finally(() => INFLIGHT.delete(id)));
+    return INFLIGHT.get(id);
+  }
+  async function loadPhoto(id) {
+    let p = await IDB.get(id);
+    if (!p && LIVE) {
+      const r = S.records.find(x => x.photoFiles && x.photoFiles[id]);
+      if (r) {
+        try {
+          const blob = await api('gw-photo?id=' + encodeURIComponent(r.photoFiles[id]), { blob: true });
+          const data = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
+          const dim = await new Promise(res => { const im = new Image(); im.onload = () => res([im.naturalWidth, im.naturalHeight]); im.onerror = () => res([4, 3]); im.src = data; });
+          p = { data, w: dim[0], h: dim[1], dark: false, remote: true };
+          IDB.put(id, p);
+        } catch (e) { p = null; }
+      }
+    }
     if (p) PC.set(id, p);
     return p || null;
   }
@@ -170,7 +252,7 @@
     const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staf · ${u ? u.name : ''}` : '';
     barEl.innerHTML = `<div class="bar-in">
       <a class="brand" href="#/"><i aria-hidden="true"></i>${S.role === 'mgr' ? 'GW Inventory' : 'GW Inventaris'}</a>
-      <div class="bar-r"><span class="demo">DEMO</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
+      <div class="bar-r"><span class="demo">${LIVE ? 'TEST' : 'DEMO'}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
     </div>`;
   }
 
@@ -188,11 +270,11 @@
     if (p[0] === '' && S.role) { go(S.role === 'mgr' ? '#/mgr' : '#/staff'); return; }
     renderBar();
     if (p[0] === 'staff' && p[1] === 'capture') viewCapture(p[2]);
-    else if (p[0] === 'staff') viewStaffHome();
-    else if (p[0] === 'mgr' && p[1] === 'rec') viewRecord(p[2]);
+    else if (p[0] === 'staff') { viewStaffHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'staff') render(true); }); }
+    else if (p[0] === 'mgr' && p[1] === 'rec') { viewRecord(p[2]); loadAgreements().then(ch => { if (ch && location.hash.includes('/rec/' + p[2])) render(true); }); }
     else if (p[0] === 'mgr' && p[1] === 'new') viewNew();
     else if (p[0] === 'mgr' && p[1] === 'team') viewTeam();
-    else if (p[0] === 'mgr') viewMgrHome();
+    else if (p[0] === 'mgr') { viewMgrHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'mgr') render(true); }); }
     else viewLogin();
     save();
     hydrate();
@@ -326,6 +408,7 @@
           <label class="btn ghost filebtn">Pilih dari galeri<input type="file" accept="image/*" multiple data-room="${room.id}" aria-label="Pilih dari galeri ${esc(roomName(room.id, 'id'))}"></label>
         </div>
         ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, 'id'))}<span class="old" data-old="${pid}" hidden>Foto lama</span><span class="dark" data-dark="${pid}" hidden>Terlalu gelap</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="Hapus foto">×</button></div>`).join('')}</div>` : ''}
+        ${(r.aiNote || {})[phase + ':' + room.id] ? `<div class="banner rd">AI: ${esc(r.aiNote[phase + ':' + room.id])} Ambil ulang foto ruangan ini.</div>` : ''}
         <div class="banner rd" data-darkmsg="${room.id}" hidden>Foto terlalu gelap, AI tidak bisa membacanya. Nyalakan lampu atau buka tirai, lalu ambil ulang. Hapus foto yang gelap.</div>
         ${body}
       </section>`;
@@ -389,12 +472,32 @@
     const key = `${r.id}:${phase}:${room}`;
     BUSY.add(key); render(true);
     const sec = document.getElementById('room-' + room); if (sec) sec.scrollIntoView({ block: 'nearest' });
-    setTimeout(() => {
-      BUSY.delete(key);
-      if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room);
-      save();
-      if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(phase === 'in' ? `AI selesai: ${roomName(room, 'id')}. Cek daftarnya.` : `AI selesai mencocokkan ${roomName(room, 'id')}.`); }
-    }, 1600);
+    const finish = msg => { BUSY.delete(key); save(); if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(msg); } };
+    const okMsg = phase === 'in' ? `AI selesai: ${roomName(room, 'id')}. Cek daftarnya.` : `AI selesai mencocokkan ${roomName(room, 'id')}.`;
+    if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); finish(okMsg); }, 1600); return; }
+    try {
+      const photosB64 = [];
+      for (const pid of good.slice(-4)) { const p = await getPhoto(pid); if (p) photosB64.push(b64(p.data)); }
+      const body = { phase, villa: villa(r.villaId).name, room: roomName(room, 'en'), photos: photosB64 };
+      if (phase === 'in' && CAT[room]) body.expected = CAT[room];
+      if (phase === 'out') body.checkin = r.outItems[room].map(i => ({ id: i.id, name: i.name, qty: i.inQty, cond: i.inCond }));
+      const res = await api('gw-ai-room', { method: 'POST', body });
+      if (!res || !res.ok) throw new Error((res && res.error) || 'AI error');
+      r.aiNote = r.aiNote || {};
+      if (res.quality === 'retake') r.aiNote[phase + ':' + room] = res.quality_note || 'Foto kurang jelas.'; else delete r.aiNote[phase + ':' + room];
+      if (phase === 'in') {
+        r.inItems[room] = (res.items || []).map(i => ({ id: uid(), name: i.name, qty: i.qty, cond: i.cond, note: i.note || '', src: 'ai', flag: i.small ? 'small' : '' }));
+      } else {
+        const list = r.outItems[room];
+        (res.items || []).forEach(x => { const it = list.find(i => i.id === x.id); if (it) { it.qty = x.qty; it.cond = x.cond; it.note = x.seen ? (x.note || '') : 'Not visible in photo'; it.unchecked = false; } });
+        list.forEach(it => { if (it.unchecked) { it.unchecked = false; it.note = 'Not visible in photo'; } });
+        (res.extra || []).forEach(e => list.push({ id: uid(), name: e.name, inQty: 0, inCond: 'Good', inNote: '', qty: parseInt(e.qty, 10) || 1, cond: e.cond || 'Good', note: e.note || 'Not on check-in list', unchecked: false, touched: false }));
+      }
+      finish(res.quality === 'retake' ? 'AI: foto kurang jelas. Cek catatan di ruangan itu.' : okMsg);
+    } catch (e) {
+      if (phase === 'in') r.inItems[room] = r.inItems[room] || [];
+      finish('AI tidak bisa dihubungi. Isi barang manual, atau tambah foto untuk mencoba lagi.');
+    }
   }
 
   async function sendPhotos(r) {
@@ -416,11 +519,18 @@
       err.textContent = `Belum ada foto: ${missing.join(', ')}. Tekan sekali lagi untuk tetap kirim.`;
       return;
     }
-    const done = overlay(`Mengirim ke manajer…`);
-    await new Promise(res => setTimeout(res, 1000));
-    done();
+    const done = overlay(LIVE ? 'Mengunggah foto dan data…' : 'Mengirim ke manajer…');
+    const prev = r.status;
     r.status = phase === 'in' ? 'checkin_pending' : 'checkout_pending';
     r[phase + 'SentAt'] = Date.now();
+    try {
+      if (LIVE) await pushRecord(r); else await new Promise(res => setTimeout(res, 1000));
+    } catch (e) {
+      r.status = prev; save(); done();
+      err.hidden = false; err.textContent = 'Gagal mengirim. Cek koneksi internet, lalu tekan Kirim lagi.';
+      return;
+    }
+    done();
     save();
     toast('Terkirim. Manajer tinggal memeriksa dan menyetujui.');
     go('#/staff');
@@ -801,6 +911,8 @@
       const fname = `${r.agreement ? r.agreement + '-' : ''}${v.name.replace(/[^A-Za-z0-9]+/g, '-')}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
       doc.save(fname);
       toast('PDF generated: ' + fname);
+      if (LIVE) api('gw-save-pdf', { method: 'POST', body: { fileName: fname, data: b64(doc.output('datauristring')) } })
+        .then(() => toast('PDF saved to Google Drive.')).catch(() => toast('PDF downloaded, but saving to Google Drive failed.'));
     } catch (e) {
       console.error(e);
       toast('The PDF could not be generated. Please try again.');
@@ -813,7 +925,15 @@
     if (t.matches('input[type=file][data-room]')) { addPhotos(t); return; }
     if (t.dataset.ok) { outEdit(t, true); return; }
     if (t.dataset.k) { inEdit(t); return; }
-    if (t.dataset.f) { const r = rec(location.hash.split('/')[3]); if (r) { r[t.dataset.f] = t.value; save(); } }
+    if (t.dataset.f) {
+      const r = rec(location.hash.split('/')[3]); if (!r) return;
+      r[t.dataset.f] = t.value; save();
+      if (t.dataset.f === 'agreement' && S.agreementData) {
+        const a = S.agreementData.find(x => x.code === t.value);
+        const iso10 = v => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? '' : iso(d); };
+        if (a) { let ch = false; if (!r.tenant && a.tenant) { r.tenant = a.tenant; ch = true; } if (!r.checkIn && iso10(a.checkIn)) { r.checkIn = iso10(a.checkIn); ch = true; } if (!r.checkOut && iso10(a.checkOut)) { r.checkOut = iso10(a.checkOut); ch = true; } if (ch) { save(); render(true); toast('Filled in from the agreement sheet.'); } }
+      }
+    }
   });
   app.addEventListener('input', e => {
     const t = e.target;
@@ -851,23 +971,23 @@
       const n = document.getElementById('nuName').value.trim(), em = document.getElementById('nuEmail').value.trim(), err = document.getElementById('nuErr');
       if (!n || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.hidden = false; err.textContent = 'Add a name and a valid email.'; return; }
       if (S.users.some(u => u.email.toLowerCase() === em.toLowerCase())) { err.hidden = false; err.textContent = 'An account with this email already exists.'; return; }
-      S.users.push({ id: uid(), name: n, email: em, role: 'staff' }); save(); toast(`Account created for ${n}.`); render();
+      S.users.push({ id: uid(), name: n, email: em, role: 'staff' }); save(); pushSettings(); toast(`Account created for ${n}.`); render();
     }
-    else if (act === 'delUser') { S.users = S.users.filter(u => u.id !== b.dataset.u); save(); render(true); }
+    else if (act === 'delUser') { S.users = S.users.filter(u => u.id !== b.dataset.u); save(); pushSettings(); render(true); }
     else if (act === 'addRoom') {
       const inp = document.getElementById('newRoom'); const name = b.dataset.name || (inp ? inp.value.trim() : '');
       if (!name) { toast(T('Ketik nama ruangan dulu.', 'Type the room name first.')); return; }
       const v = villa(b.dataset.v); v.rooms = v.rooms || [];
       if (roomsFor(v.id).some(x => x.en.toLowerCase() === name.toLowerCase())) { toast(T('Ruangan ini sudah ada.', 'This room already exists.')); return; }
-      const room = { id: 'rm-' + uid(), en: name, id_: b.dataset.nameId || name }; v.rooms.push(room);
+      const room = { id: 'rm-' + uid(), en: name, id_: b.dataset.nameId || name }; v.rooms.push(room); pushSettings();
       if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) r.inItems[room.id] = []; }
       save(); toast(T(`${room.id_} ditambahkan. Ambil foto atau tambah barang.`, `${name} added.`)); render(true);
     }
     else if (act === 'startIn') {
       const r = { id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() };
-      S.records.push(r); save(); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
+      S.records.push(r); save(); pushRecord(r).catch(() => {}); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
     }
-    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); go(`#/staff/capture/${r.id}`); }
+    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(() => {}); go(`#/staff/capture/${r.id}`); }
     else if (act === 'rmPhoto') {
       const r = rec(location.hash.split('/')[3]); const phase = r.status === 'in_draft' ? 'in' : 'out';
       const l = r[phase + 'Photos'][b.dataset.room] || []; const i = l.indexOf(b.dataset.pid);
@@ -897,16 +1017,18 @@
       if (probs.length) { err.hidden = false; err.textContent = probs.join(' '); return; }
       r.status = 'occupied'; r.inApprovedAt = Date.now(); save();
       toast('Check-in approved. Check-out reminder email is scheduled.'); render();
+      pushRecord(r).catch(() => toast('Approved on this device, but saving to the server failed. Open the record again to retry.'));
     }
     else if (act === 'approveOut') {
       const r = rec(b.dataset.r); r.status = 'closed'; r.outApprovedAt = Date.now(); save();
       toast('Check-out approved. The villa is empty again.'); render();
+      pushRecord(r).catch(() => toast('Approved on this device, but saving to the server failed.'));
     }
     else if (act === 'pdf') { if (!b.disabled) makePdf(rec(b.dataset.r), b.dataset.ph); }
     else if (act === 'addVilla') {
       const inp = document.getElementById('newVilla'); const name = inp.value.trim(); const err = document.getElementById('nvErr');
       if (!name) { err.hidden = false; err.textContent = 'Type the villa name first.'; return; }
-      S.villas.push({ id: uid(), name, area: '' }); save(); toast(`${name} added.`); render();
+      S.villas.push({ id: uid(), name, area: '' }); save(); pushSettings(); toast(`${name} added.`); render();
     }
     else if (act === 'reset') {
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to reset everything'; return; }
@@ -918,4 +1040,5 @@
 
   load();
   render();
+  if (LIVE) pullAll(true).then(ch => { if (ch) render(true); });
 })();

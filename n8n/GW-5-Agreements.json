@@ -1,0 +1,135 @@
+{
+  "name": "GW Inventory \u00b7 5 Agreement codes",
+  "nodes": [
+    {
+      "id": "15dc33b7-7010-40e7-ad32-dfb5ee6d62be",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "c56aa8e0-3463-4393-b831-ab8db8bdfe22",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gw-agreements",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GW Inventory key"
+        }
+      }
+    },
+    {
+      "id": "acf50e03-294e-4de0-b28d-b319f7feab1d",
+      "name": "Read agreements",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1k-SZjaxNiEuIjxW1a1sdicR-j4cwkR315r72zHZJ5Q4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "7414ec4c-e2e2-40c1-a54a-442cf54e75e5",
+      "name": "List codes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// List agreement codes from the manager's agreement sheet. Column names are matched loosely.\nconst pick = (row, names) => { for (const k of Object.keys(row)) if (names.includes(k.trim().toLowerCase())) return row[k]; return ''; };\nconst list = $input.all().map(i => i.json).map(row => ({\n  code: String(pick(row, ['agreement code', 'agreement', 'code', 'kode']) || '').trim(),\n  villa: pick(row, ['villa', 'property']), tenant: pick(row, ['tenant', 'penyewa', 'name']),\n  checkIn: pick(row, ['check-in', 'check in', 'checkin', 'start']), checkOut: pick(row, ['check-out', 'check out', 'checkout', 'end'])\n})).filter(a => a.code);\nreturn [{ json: { ok: true, agreements: list } }];\n"
+      }
+    },
+    {
+      "id": "3234532f-90f6-47fb-bca4-3d6d3b17c62c",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read agreements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read agreements": {
+      "main": [
+        [
+          {
+            "node": "List codes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List codes": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
