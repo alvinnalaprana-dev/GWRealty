@@ -15,7 +15,7 @@ A clickable demo of the villa inventory system for GW Realty, built by Kriyator.
 
 Staff screens are in Indonesian; manager screens and PDFs are in English.
 
-Updated 20 Oct 2026 after the client meeting: rooms can be added per villa, tenant details are optional, the manager creates staff accounts (Team page), one email reminder 7 days before check-out, and the PDF has a tenant acknowledgement with manager and tenant signature lines.
+Updated 20 Oct 2026 after the client meeting: rooms can be added per villa, tenant details are optional, the manager creates staff accounts (Team page), one email reminder 7 days before check-out, an agreement code picked from the manager's agreement Google Sheet (required to approve; shown on the PDF and in its file name), and the PDF has a tenant acknowledgement with manager and tenant signature lines.
 
 ## Demo limits
 

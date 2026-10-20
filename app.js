@@ -10,7 +10,7 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v2';
+  const KEY = 'gwinv-demo-v3';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -41,7 +41,9 @@
     const wg = bromoItems.kitchen.find(i => i.name === 'Wine glasses');
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
-      v: 2, role: null, user: null,
+      v: 3, role: null, user: null,
+      /* Demo copy of the manager's agreement Google Sheet (live: read from the sheet) */
+      agreements: ['GWR-AG-2026-031', 'GWR-AG-2026-032', 'GWR-AG-2026-033', 'GWR-AG-2026-034', 'GWR-AG-2026-035'],
       users: [
         { id: 'u-mgr', name: 'Manager', email: 'manager@gwrealtyglobal.com', role: 'mgr' },
         { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff' }
@@ -53,7 +55,7 @@
         { id: 'asmara', name: 'Villa Asmara', area: 'Tumbak Bayuh' }
       ],
       records: [{
-        id: 'demo01', villaId: 'bromo', tenant: 'Demo Tenant', seeded: true,
+        id: 'demo01', villaId: 'bromo', tenant: 'Demo Tenant', agreement: 'GWR-AG-2026-019', seeded: true,
         checkIn: iso(addDays(t, -88)), checkOut: iso(addDays(t, 3)),
         status: 'occupied', inPhotos: {}, inItems: bromoItems, inApprovedAt: Date.now() - 88 * 864e5,
         outPhotos: {}, outItems: null, createdAt: Date.now() - 88 * 864e5
@@ -62,7 +64,7 @@
   }
   function load() {
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-    if (!S || S.v !== 2) S = seed();
+    if (!S || S.v !== 3) S = seed();
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');
@@ -381,7 +383,7 @@
     const rows = S.villas.map(v => {
       const r = activeRec(v.id); const s = statusMgr(r);
       return `<tr><td><b>${esc(v.name)}</b>${v.area ? `<br><span class="note">${esc(v.area)}</span>` : ''}</td>
-        <td>${r && r.tenant ? esc(r.tenant) : '—'}</td>
+        <td>${r && r.tenant ? esc(r.tenant) : '—'}${r && r.agreement ? `<br><span class="note">${esc(r.agreement)}</span>` : ''}</td>
         <td class="num">${r && r.checkIn && r.status !== 'in_draft' && r.status !== 'checkin_pending' ? fmt(r.checkIn) : '—'}</td>
         <td class="num">${r && r.checkOut ? fmt(r.checkOut) : '—'}</td>
         <td>${s.chip}</td><td style="text-align:right">${s.act}</td></tr>`;
@@ -556,6 +558,9 @@
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <div class="card"><div class="form">
         <div class="fld"><label for="f-villa">Villa</label><input id="f-villa" value="${esc(v.name)}" readonly></div>
+        <div class="fld"><label for="f-ag">Agreement code</label>${edit
+          ? `<select id="f-ag" data-f="agreement"><option value="">Choose from agreement sheet…</option>${S.agreements.filter(c => c === r.agreement || !S.records.some(x => x.agreement === c && x.id !== r.id)).map(c => `<option${c === r.agreement ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`
+          : `<input id="f-ag" value="${esc(r.agreement || '—')}" readonly>`}</div>
         <div class="fld"><label for="f-tenant">Tenant name <span class="opt">optional</span></label><input id="f-tenant" data-f="tenant" value="${esc(r.tenant)}" placeholder="Tenant name" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-phone">Phone <span class="opt">optional</span></label><input id="f-phone" data-f="phone" value="${esc(r.phone)}" placeholder="+62…" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-email">Email <span class="opt">optional</span></label><input id="f-email" type="email" data-f="email" value="${esc(r.email)}" placeholder="tenant@email.com" ${edit ? '' : 'readonly'}></div>
@@ -564,6 +569,7 @@
         <div class="fld"><label for="f-in">Check-in date</label><input id="f-in" type="date" data-f="checkIn" value="${esc(r.checkIn)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>
       </div></div>
+      ${edit ? `<p class="note">Agreement codes come from the manager's agreement Google Sheet. A code already used on another record is hidden.</p>` : ''}
       ${edit ? `<div class="banner ai"><b>AI listed ${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'} from ${nPh} photo${nPh === 1 ? '' : 's'}.</b> Items marked <span class="warnico">⚠</span> are small items: please check the count. AI cannot see hidden things, such as a mattress protector under the sheet. Add them with "+ Add item".</div>` : ''}
       ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}.</div>` : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
@@ -613,7 +619,7 @@
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-out review' : 'Check-out · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
-      <p class="sub">Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)}</p>
+      <p class="sub">Agreement <b>${esc(r.agreement || '—')}</b> · Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)}</p>
       ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the approved check-in list (${nItems} items).</b> ${ch.length} change${ch.length === 1 ? '' : 's'} found. Confirm or correct each one. Items already damaged at check-in are not counted again.</div>` : ''}
       ${unchecked.length ? `<div class="banner am">No check-out photos for: ${esc(unchecked.join(', '))}. Those items are marked "Not photographed".</div>` : ''}
       <div class="card"><h3>Changes since check-in</h3>
@@ -641,7 +647,7 @@
       const doc = new jsPDF({ unit: 'mm', format: 'a4' });
       const v = villa(r.villaId);
       const W = 210, M = 14, BOTTOM = 282;
-      const repNo = `GWR-${r.id.slice(0, 6).toUpperCase()}-${phase === 'in' ? 'IN' : 'OUT'}`;
+      const repNo = `${r.agreement || 'GWR-' + r.id.slice(0, 6).toUpperCase()}-${phase === 'in' ? 'IN' : 'OUT'}`;
       const title = phase === 'in' ? 'Check-in Report' : 'Check-out Report';
       const GREEN = [14, 124, 102], DARK = [21, 32, 28], MUTED = [91, 107, 101];
       let y;
@@ -657,7 +663,7 @@
       header();
       // meta
       doc.setFontSize(10);
-      const meta = [['Villa', v.name], ['Tenant', r.tenant || '-'], ['Check-in', fmt(r.checkIn)], ['Check-out', fmt(r.checkOut)],
+      const meta = [['Agreement', r.agreement || '-'], ['Villa', v.name], ['Tenant', r.tenant || '-'], ['Check-in', fmt(r.checkIn)], ['Check-out', fmt(r.checkOut)],
         ['Approved', fmt(iso(new Date(phase === 'in' ? r.inApprovedAt : r.outApprovedAt || Date.now())))], ['Approved by', 'Manager']];
       if (r.phone) meta.push(['Phone', r.phone]);
       if (r.email) meta.push(['Email', r.email]);
@@ -685,6 +691,25 @@
             doc.addImage(p.data, 'JPEG', x + (bw - dw) / 2, y + (bh - dh) / 2, dw, dh);
           }
         }
+        y += bh + 5;
+      };
+      // check-in (left) vs check-out (right), up to 2 photos each, same row
+      const photoPair = async (inIds, outIds) => {
+        const gap = 3, mid = 6, half = (W - 2 * M - mid) / 2, bw = (half - gap) / 2, bh = bw * 0.75;
+        need(bh + 9);
+        doc.setFontSize(8); doc.setTextColor(...MUTED);
+        doc.text('Check-in', M, y); doc.text('Check-out', M + half + mid, y); doc.setTextColor(...DARK); y += 2;
+        const draw = async (ids, x0) => {
+          for (let i = 0; i < 2; i++) {
+            const x = x0 + i * (bw + gap);
+            doc.setFillColor(238, 242, 240); doc.rect(x, y, bw, bh, 'F');
+            const p = ids[i] ? await getPhoto(ids[i]) : null;
+            if (p) { const ratio = p.w / p.h; let dw = bw, dh = bw / ratio; if (dh > bh) { dh = bh; dw = bh * ratio; } doc.addImage(p.data, 'JPEG', x + (bw - dw) / 2, y + (bh - dh) / 2, dw, dh); }
+            else if (i === 0) { doc.setFontSize(8); doc.setTextColor(...MUTED); doc.text('No photo', x + bw / 2, y + bh / 2, { align: 'center' }); doc.setTextColor(...DARK); }
+          }
+        };
+        await draw(inIds, M); await draw(outIds, M + half + mid);
+        doc.setDrawColor(217, 224, 221); doc.line(M + half + mid / 2, y, M + half + mid / 2, y + bh);
         y += bh + 5;
       };
       const roomTitle = (name, extra) => {
@@ -716,8 +741,7 @@
         else { doc.setFontSize(10); doc.text('No changes. Everything is the same as at check-in.', M, y); y += 10; }
         for (const k of Object.keys(r.outItems || {})) {
           roomTitle(roomName(k, 'en'), `${r.outItems[k].length} items`);
-          await photoRow(r.inPhotos[k] || [], 'Check-in', 3);
-          await photoRow(r.outPhotos[k] || [], 'Check-out', 3);
+          await photoPair(r.inPhotos[k] || [], r.outPhotos[k] || []);
           table(['Item', 'Check-in', 'Check-out', 'Result'], r.outItems[k].map(it => [it.name, `${it.inQty} ${it.inCond}`, `${it.qty} ${it.cond}`, result(it).t]), { 1: { cellWidth: 30 }, 2: { cellWidth: 30 }, 3: { cellWidth: 34 } });
         }
       }
@@ -748,7 +772,7 @@
         doc.text(`${v.name} · ${title} · GW Realty`, M, 291);
         doc.text(`Page ${i} of ${pages}`, W - M, 291, { align: 'right' });
       }
-      const fname = `${v.name.replace(/[^A-Za-z0-9]+/g, '-')}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
+      const fname = `${r.agreement ? r.agreement + '-' : ''}${v.name.replace(/[^A-Za-z0-9]+/g, '-')}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
       doc.save(fname);
       toast('PDF generated: ' + fname);
     } catch (e) {
@@ -837,6 +861,7 @@
     }
     else if (act === 'approveIn') {
       const r = rec(b.dataset.r); const err = document.getElementById('apErr'); const probs = [];
+      if (!r.agreement) probs.push('Choose the agreement code.');
       if (!r.checkIn) probs.push('Add the check-in date.');
       if (!r.checkOut) probs.push('Add the check-out date.');
       if (r.checkIn && r.checkOut && r.checkOut <= r.checkIn) probs.push('The check-out date must be after the check-in date.');
