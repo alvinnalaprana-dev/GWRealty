@@ -124,7 +124,15 @@
     const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(src, 0, 0, w, h);
     return { data: c.toDataURL('image/jpeg', 0.72), w, h, old: !!(file.lastModified && Date.now() - file.lastModified > 864e5), size: file.size };
   }
+  function labelTables() {
+    app.querySelectorAll('table').forEach(t => {
+      const first = t.querySelector('tr'); if (!first) return;
+      const hs = Array.from(first.children).map(th => th.tagName === 'TH' ? th.textContent.trim() : '');
+      t.querySelectorAll('tr').forEach(tr => Array.from(tr.children).forEach((td, i) => { if (td.tagName === 'TD' && hs[i] && !td.hasAttribute('colspan')) td.dataset.label = hs[i]; }));
+    });
+  }
   function hydrate() {
+    labelTables();
     app.querySelectorAll('img[data-pid]').forEach(async im => {
       const p = await getPhoto(im.dataset.pid);
       if (p) im.src = p.data; else im.replaceWith(Object.assign(document.createElement('div'), { className: 'ph-empty', innerHTML: '<span>—</span>' }));
