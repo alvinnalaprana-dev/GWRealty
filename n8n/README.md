@@ -22,17 +22,13 @@ Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 no
    - **GW Google Sheets**, **GW Google Drive**, **GW Gmail** (OAuth2; names start with GW so they never mix with the Inquiry Tracker's credentials): sign in with **Alvin's Google account** (alvin.nalaprana@gmail.com) for all three. Decided with GW Realty on 20 Oct 2026: the system runs on Alvin's Drive; GW Realty gets view access to photos and PDFs only, and their own Google account and data are never connected.
 3. **Open each workflow** and pick the credential on every node with a warning triangle.
 4. **GW-7 Reminder:** already set to send to the manager, manno.realtor@gmail.com.
-5. **Activate** all six workflows (toggle top right).
-6. **Connect the page:** in `config.js` set
-   ```js
-   window.GW_API = { base: 'https://YOUR-N8N-DOMAIN/webhook', key: 'THE SAME RANDOM STRING AS STEP 2' };
-   ```
-   Commit and push; Netlify redeploys. The header badge changes from DEMO to TEST.
+5. **Activate** all six workflows (toggle top right). After editing an active workflow, switch it off and on again: n8n keeps running the old copy until then.
+6. **Connect the page:** `config.js` holds both connections. Open the site once with `?live=1` on a device to use the real system there (badge shows TEST); `?demo=1` switches back. At launch, set `MODE_DEFAULT = 'live'`, commit and push.
 
 ## Google Drive locations (Alvin's account, already filled into the workflows)
 
 - `GW Realty File/Photos` and `GW Realty File/Reports (PDF)`: share the **GW Realty File** folder with GW Realty as **Viewer**. They see photos and PDFs only.
-- `GW Realty System (private)/GW Realty Inventory Records`: the records sheet (header row in row 1; do not rename the headers). Not shared with GW Realty.
+- `GW Realty System (private)/GW Realty Inventory Records`: the records sheet, tab **Untitled** (the workflows point at this tab by its ID, so renaming the tab is fine, deleting it is not). Header row in row 1; do not rename the headers. Not shared with GW Realty.
 
 ## Switching the AI model
 

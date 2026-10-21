@@ -10,7 +10,9 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v7';
+  // Live (n8n) keeps its own copy on the device, so demo data never leaks into the real records.
+  const REAL = !!(window.GW_API && window.GW_API.base && window.GW_API.base !== '/api');
+  const KEY = REAL ? 'gwinv-live-v1' : 'gwinv-demo-v7';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -120,6 +122,7 @@
       if (st) { if (Array.isArray(st.villas) && st.villas.length) S.villas = st.villas; if (Array.isArray(st.users) && st.users.length) S.users = st.users; }
       else {
         // Fresh shared storage: seed it with this device's villas, users and sample lease.
+        if (REAL) S.records = [];   // real system: start with villas and accounts only, no sample leases
         await pushSettings();
         for (const r of S.records) await pushRecord(r);
         lastPull = Date.now(); save(); return true;
@@ -592,13 +595,13 @@
       <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add villa</a></div></div>
       <div class="grid2">
         <div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
-        <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">In the live system an email goes to the manager 7 days before each check-out.</p></div>
+        <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'An email goes' : 'In the live system an email goes'} to the manager 7 days before each check-out.</p></div>
       </div>
       <div class="card"><h3>Completed</h3>${hist}</div>
-      <div class="row" style="justify-content:space-between">
+      ${REAL ? '' : `<div class="row" style="justify-content:space-between">
         <p class="note">${LIVE ? 'Demo: data is shared with staff phones. Reset clears it for everyone and starts again with the sample villas.' : 'Demo: data stays in this browser. Reset to start again with the sample villas.'}</p>
         <button class="btn danger sm" data-act="reset">Reset demo</button>
-      </div>
+      </div>`}
     </div>`;
   }
 
