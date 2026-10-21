@@ -40,7 +40,7 @@ In GW-1, node *Prepare request*, first line: `const MODEL = 'claude-haiku-5-5';`
 
 ## Known limits (testing stage)
 
-- **Login is not secure yet.** The page still lets anyone pick an account, and the webhook key is visible in the page source. Fine for testing with GW Realty; proper sign-in must be added before going live.
+- **Login:** everyone signs in with email + password (the manager creates staff accounts and passwords on the Team page). Passwords are stored as hashes in the records sheet's `_settings` row. The check happens in the browser, and the webhook key is visible in the page source, so this keeps the wrong people out of the screens but is not bank-grade security. A server-side check in n8n is the next step if GW Realty needs more.
 - **Your server must be up.** If n8n is down, staff can still type items manually, but nothing saves until it is back.
 - **One record per sheet row**, full detail in the `dataJson` column (Google Sheets cell limit about 50,000 characters, enough for roughly 300 items).
 - **Each AI call sends up to 4 photos per room.** Staff can add more photos; the latest four are used.

@@ -10,7 +10,7 @@
   const CAT = window.GW_CATALOG;
   const SMALL = new Set(window.GW_SMALL);
   const HIDDEN = new Set(window.GW_HIDDEN);
-  const KEY = 'gwinv-demo-v6';
+  const KEY = 'gwinv-demo-v7';
   const CONDS = ['Good', 'Worn', 'Damaged'];
   const RANK = { Good: 0, Worn: 1, Damaged: 2 };
 
@@ -41,10 +41,10 @@
     const wg = bromoItems.kitchen.find(i => i.name === 'Wine glasses');
     if (wg) { wg.cond = 'Damaged'; wg.note = '1 cracked'; }
     return {
-      v: 6, role: null, user: null,
+      v: 7, role: null, user: null,
       users: [
-        { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr' },
-        { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff' }
+        { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr', pw: 'fc3faa9bd06be49cc0cb0a59f8fdff6a3b35f3a8ddd82b4b4acc9dcb4f157868' },
+        { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff', pw: 'b9d5a90c1253cdffed78c96fe6235c6a1ed447013a57ad60c5907b1aa1b7fe2d' }
       ],
       villas: [
         { id: 'madya1', name: 'Villa Madya 1', area: '' },
@@ -62,12 +62,13 @@
   }
   function load() {
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-    if (!S || S.v !== 6) S = seed();
+    if (!S || S.v !== 7) S = seed();
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');
   const T = (id, en) => (L() === 'id' ? id : en);
   const villa = id => S.villas.find(v => v.id === id);
+  const pwHash = async (email, pw) => { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).toLowerCase().trim() + ':' + pw)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); };
   const curUser = () => (S.users || []).find(u => u.id === S.user);
   const rec = id => S.records.find(r => r.id === id);
   const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed');
@@ -278,14 +279,20 @@
   /* ---------- login ---------- */
   function viewLogin() {
     S.role = null; S.user = null; renderBar();
-    const mgr = S.users.filter(u => u.role === 'mgr'), staff = S.users.filter(u => u.role === 'staff');
-    const btn = u => `<button data-act="login" data-u="${u.id}"><b>${esc(u.name)}</b><span>${esc(u.email)} · ${u.role === 'mgr' ? 'Manager: checks the AI list, approves, makes the PDF.' : 'Staff: takes photos at the villa (screens in Indonesian).'}</span></button>`;
+    const demo = !LIVE || (API.label || '').toUpperCase() === 'DEMO';
     app.innerHTML = `<div class="login">
-      <p class="eyebrow">GW Realty · Demo</p>
+      <p class="eyebrow">GW Realty</p>
       <h1>Villa Inventory</h1>
-      <p class="sub">Photos at check-in and check-out. AI makes the list, the manager approves, the system makes the report. Sign in to try it.</p>
-      <div class="pick">${mgr.concat(staff).map(btn).join('')}</div>
-      <p class="note">In the live system each person signs in with their email and password. The manager creates staff accounts on the Team page. ${LIVE ? 'This is a demo: AI results are simulated. Data is shared between devices, so staff can work on a phone and the manager on a laptop.' : 'This is a demo: AI results are simulated and all data stays in this browser.'}</p>
+      <p class="sub">Sign in with the email and password your manager gave you.</p>
+      <form class="card" id="loginForm" autocomplete="on">
+        <div class="fld"><label for="lgEmail">Email</label><input id="lgEmail" type="email" autocomplete="username" required></div>
+        <div class="fld"><label for="lgPw">Password</label><input id="lgPw" type="password" autocomplete="current-password" required></div>
+        <p class="err" id="lgErr" hidden></p>
+        <button class="btn block" type="submit">Sign in</button>
+      </form>
+      ${demo ? `<div class="card"><h3>Demo accounts</h3>
+        <p class="note"><b>Manager</b> (laptop): manno.realtor@gmail.com · password <b>gwrealty2026</b><br><b>Staff</b> (phone): wayan@gwrealtyglobal.com · password <b>wayan2026</b></p>
+        <p class="note">AI results are simulated in the demo.${LIVE ? ' Data is shared between devices.' : ' Data stays in this browser.'}</p></div>` : ''}
     </div>`;
   }
 
@@ -296,17 +303,27 @@
     app.innerHTML = `<div class="page narrow">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">Accounts</p><h1>Team</h1></div></div>
-      <p class="sub">One manager approves everything. Create an account for each staff member who takes photos.</p>
+      <p class="sub">The manager adds villas and reviews every inventory. Staff only do the inventory on their phone. Create an account for each staff member and tell them their password.</p>
       <div class="tbl"><table class="vt"><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>${rows}</table></div>
       <div class="card">
         <h3>Create staff account</h3>
         <div class="form">
           <div class="fld"><label for="nuName">Name</label><input id="nuName" placeholder="e.g. Komang"></div>
           <div class="fld"><label for="nuEmail">Email</label><input id="nuEmail" type="email" placeholder="komang@gwrealtyglobal.com"></div>
+          <div class="fld"><label for="nuPw">Password</label><input id="nuPw" type="text" autocomplete="off" placeholder="At least 6 characters"></div>
         </div>
         <p class="err" id="nuErr" hidden></p>
         <button class="btn" data-act="addUser">Create account</button>
-        <p class="note">In the live system the new staff member gets an email to set their password.</p>
+      </div>
+      <div class="card">
+        <h3>Change a password</h3>
+        <div class="form">
+          <div class="fld"><label for="cpUser">Account</label><select id="cpUser">${S.users.map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}</select></div>
+          <div class="fld"><label for="cpPw">New password</label><input id="cpPw" type="text" autocomplete="off" placeholder="At least 6 characters"></div>
+        </div>
+        <p class="err" id="cpErr" hidden></p>
+        <button class="btn ghost" data-act="setPw">Save new password</button>
+        <p class="note">Use this when staff forget their password, or to change the manager's own password.</p>
       </div>
     </div>`;
   }
@@ -926,6 +943,15 @@
   }
 
   /* ---------- events ---------- */
+  app.addEventListener('submit', async e => {
+    if (e.target.id !== 'loginForm') return;
+    e.preventDefault();
+    const em = document.getElementById('lgEmail').value.trim(), pw = document.getElementById('lgPw').value, err = document.getElementById('lgErr');
+    if (LIVE) await pullAll(true);
+    const u = S.users.find(x => x.email.toLowerCase() === em.toLowerCase());
+    if (!u || !u.pw || u.pw !== await pwHash(em, pw)) { err.hidden = false; err.textContent = 'Email or password is not correct.'; return; }
+    S.user = u.id; S.role = u.role; save(); go(u.role === 'mgr' ? '#/mgr' : '#/staff');
+  });
   app.addEventListener('change', e => {
     const t = e.target;
     if (t.matches('input[type=file][data-room]')) { addPhotos(t); return; }
@@ -979,14 +1005,23 @@
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'login') { const u = S.users.find(x => x.id === b.dataset.u); if (!u) return; S.user = u.id; S.role = u.role; save(); go(u.role === 'mgr' ? '#/mgr' : '#/staff'); }
+    if (act === 'setPw') {
+      const u = S.users.find(x => x.id === document.getElementById('cpUser').value), pw = document.getElementById('cpPw').value, err = document.getElementById('cpErr');
+      if (!u || pw.length < 6) { err.hidden = false; err.textContent = 'The password needs at least 6 characters.'; return; }
+      pwHash(u.email, pw).then(h => { u.pw = h; save(); pushSettings(); toast(`Password changed for ${u.name}.`); render(true); });
+    }
     else if (act === 'addUser') {
       const n = document.getElementById('nuName').value.trim(), em = document.getElementById('nuEmail').value.trim(), err = document.getElementById('nuErr');
       if (!n || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.hidden = false; err.textContent = 'Add a name and a valid email.'; return; }
       if (S.users.some(u => u.email.toLowerCase() === em.toLowerCase())) { err.hidden = false; err.textContent = 'An account with this email already exists.'; return; }
-      S.users.push({ id: uid(), name: n, email: em, role: 'staff' }); save(); pushSettings(); toast(`Account created for ${n}.`); render();
+      const pw = document.getElementById('nuPw').value;
+      if (pw.length < 6) { err.hidden = false; err.textContent = 'The password needs at least 6 characters.'; return; }
+      pwHash(em, pw).then(h => { S.users.push({ id: uid(), name: n, email: em, role: 'staff', pw: h }); save(); pushSettings(); toast(`Account created for ${n}. Tell them their password.`); render(); });
     }
-    else if (act === 'delUser') { S.users = S.users.filter(u => u.id !== b.dataset.u); save(); pushSettings(); render(true); }
+    else if (act === 'delUser') {
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to remove'; return; }
+      S.users = S.users.filter(u => u.id !== b.dataset.u); save(); pushSettings(); render(true);
+    }
     else if (act === 'addRoom') {
       const inp = document.getElementById('newRoom'); const name = b.dataset.name || (inp ? inp.value.trim() : '');
       if (!name) { toast(T('Ketik nama ruangan dulu.', 'Type the room name first.')); return; }
