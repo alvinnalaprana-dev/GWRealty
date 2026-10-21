@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 1 AI per room",
   "nodes": [
     {
-      "id": "5eb8a8ff-15e3-4b92-a05b-648e9bdcc986",
+      "id": "84749d8a-4ce1-48ee-9572-944751c9e991",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "1330d670-d761-4a4d-972f-bfe27085c8e3",
+      "webhookId": "43ca4440-c498-4b4b-a6fb-c074e7292da4",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-ai-room",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "7a0a166f-3b3b-43cd-9ada-da15fd079bd2",
+      "id": "f69df33a-3c3e-4275-8631-9e12af6a0e19",
       "name": "Prepare request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "0694c309-ab3b-4875-a8a8-f25dbc2cb45f",
+      "id": "f687adf1-2cfb-4cf4-8b99-0dba442aa444",
       "name": "Claude API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -74,12 +74,12 @@
       "credentials": {
         "httpHeaderAuth": {
           "id": "",
-          "name": "Anthropic API key"
+          "name": "GW Anthropic API key"
         }
       }
     },
     {
-      "id": "c37e6fbe-f17f-4d8c-9658-2d8fb3c426d0",
+      "id": "6ec7488e-e2a0-47a2-a30f-2b1cdf3fda7f",
       "name": "Parse reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -92,7 +92,7 @@
       }
     },
     {
-      "id": "85b7c6c5-feb4-44f7-8948-0e45b0b624f7",
+      "id": "d4f6d28d-14a9-481e-b0b6-3568f0c434dc",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

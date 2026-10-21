@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 3 List records",
   "nodes": [
     {
-      "id": "545a5c36-d395-48f8-b52d-cb1c4ce0219c",
+      "id": "8a9cb428-0d24-443e-a192-90273cdf7674",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "61ddb81c-8b21-40b1-a831-bd47bf9d212c",
+      "webhookId": "d2448a5e-06f0-4d47-881c-dada7c794508",
       "parameters": {
         "httpMethod": "GET",
         "path": "gw-records",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "1e879aaa-27c0-4cf7-b214-a877da2ce79d",
+      "id": "9cdc7e95-7886-4d9b-b523-c7c094bfdad0",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -54,13 +54,13 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "",
-          "name": "Google Sheets account"
+          "name": "GW Google Sheets"
         }
       },
       "alwaysOutputData": true
     },
     {
-      "id": "f45220ed-d060-4cf6-a5a6-9782b990cbcc",
+      "id": "8aacfe4f-b2cc-45b0-af27-d937c3042770",
       "name": "Parse records",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -73,7 +73,7 @@
       }
     },
     {
-      "id": "bfd4454a-f11b-4309-9422-55634678cb3a",
+      "id": "c8d2ca4a-6605-42f9-a733-a786eaa44122",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 6 Save PDF",
   "nodes": [
     {
-      "id": "7b5793e7-9cb1-4998-9278-445ca2f30f5b",
+      "id": "6e6fae55-d24a-4ec0-8262-59669aa4d717",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "03c83d32-3ce0-457a-b62b-f299c4518349",
+      "webhookId": "14925c10-6a0e-4e20-9544-3290f3ec0a77",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-pdf",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "2526e985-4072-411e-8f25-d1135b9ba672",
+      "id": "1c2cd5e6-9be6-4249-bfec-33f18a94cb79",
       "name": "PDF to file",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "b70407ef-916d-460b-ba8f-266649a60500",
+      "id": "2e30d448-b320-49d8-b1e0-4ed4cda9c91e",
       "name": "Upload PDF",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -68,12 +68,12 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "",
-          "name": "Google Drive account"
+          "name": "GW Google Drive"
         }
       }
     },
     {
-      "id": "2e29b4fe-2ef6-469f-81cd-46c50a6a51e7",
+      "id": "85817913-f133-4e9e-ac8d-b47ee72ea8c2",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

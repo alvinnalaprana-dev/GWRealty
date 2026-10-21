@@ -2,7 +2,7 @@
   "name": "GW Inventory \u00b7 7 Check-out reminder (daily)",
   "nodes": [
     {
-      "id": "ac17bbfb-5bad-4370-8e19-55bf6e7cf1fb",
+      "id": "e9529112-99d1-4d80-9820-e483d74e8557",
       "name": "Every day 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -21,7 +21,7 @@
       }
     },
     {
-      "id": "8ac3c4fa-7ab0-44d5-947d-addc9ff0de33",
+      "id": "f64e22d0-91cd-4c21-879a-32b672c54bc5",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -46,12 +46,12 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "",
-          "name": "Google Sheets account"
+          "name": "GW Google Sheets"
         }
       }
     },
     {
-      "id": "2229397c-284a-4509-ba7d-069b66cdb197",
+      "id": "2c2f4bd9-2307-4f09-b5ee-95b0466b51f0",
       "name": "Due in 7 days",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": "7da1280b-9326-4da8-ba76-5a2517cbd5ce",
+      "id": "5cf7d980-53a4-436b-9d78-98b6d81d183b",
       "name": "Email manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
@@ -84,7 +84,7 @@
       "credentials": {
         "gmailOAuth2": {
           "id": "",
-          "name": "Gmail account"
+          "name": "GW Gmail"
         }
       }
     }
