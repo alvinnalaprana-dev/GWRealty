@@ -1,42 +1,46 @@
 # GW Realty Inventory — n8n workflows
 
-Six workflows for your own n8n server. The web page talks to them through webhooks; n8n talks to Claude (AI) and Google Drive/Sheets/Gmail.
+Seven workflows on Alvin's n8n server (alvinserver1). The web page talks to them through webhooks (public through Tailscale Funnel, `/webhook` only); n8n talks to Claude (AI) and Google Drive/Sheets/Gmail.
 
 | File | Webhook | What it does |
 |---|---|---|
-| GW-1-AI-room.json | POST `gw-ai-room` | Sends a room's photos to Claude Haiku 5.5, returns the item list (check-in) or the comparison (check-out) |
-| GW-2-Save-record.json | POST `gw-save-record` | Uploads new photos to Drive `Photos`, upserts the record row in the Records sheet |
-| GW-3-List-records.json | GET `gw-records` | Returns all records (and the `_settings` row with villas and users) |
-| GW-4-Photo.json | GET `gw-photo?id=` | Streams one photo from Drive, so the manager's device can see staff photos |
-| GW-6-Save-PDF.json | POST `gw-save-pdf` | Saves each generated PDF to Drive `Reports (PDF)` |
+| GW-0-Login.json | POST `gw-login` | Checks email + password against the accounts in the sheet, returns a signed 30-day sign-in |
+| GW-1-AI-room.json | POST `gw-ai-room` | Signed-in users. Sends a room's photos to Claude Haiku 5.5, returns the item list (check-in) or the comparison (check-out) |
+| GW-2-Save-record.json | POST `gw-save-record` | Checks who is saving and what they may change, refuses stale copies (409), uploads new photos to Drive `Photos`, upserts the row |
+| GW-3-List-records.json | GET `gw-records` | Records for a signed-in user. Never sends password hashes; staff get no tenant contact details |
+| GW-4-Photo.json | GET `gw-photo?id=` | Streams one photo from Drive, only if it belongs to a record |
+| GW-6-Save-PDF.json | POST `gw-save-pdf` | Manager only. Saves each PDF to Drive `Reports (PDF)` |
 | GW-7-Reminder.json | daily 08:00 WITA | Emails the manager about check-outs 7 days away |
 
-## Setup (about 20 minutes)
+## How sign-in works
 
-Agreement codes are typed in by the manager (GW Realty decided on 20 Oct 2026 not to link their agreement sheet).
+- The page sends no key. Every request carries the header `X-GW-Token` (the signed sign-in from `gw-login`).
+- The server rules are in `src/gwcore.cjs`, shared with the demo backend. n8n Code nodes block the crypto module, so SHA-256/HMAC are plain JavaScript there.
+- The signing secret and the first manager password are written into the Code nodes at upload time by `src/build.py OUTDIR SECRETS.json`. They are **not** in this repo; the files here contain `__GW_SECRET__` / `__GW_BOOT_HASH__` placeholders. Changing the secret signs everyone out.
+- Before the sheet has a `_settings` row, only the first manager account (manno.realtor@gmail.com, password given to Alvin privately) can sign in. On that first sign-in the page creates `_settings` with GW Realty's villas (Blu, Zala, Karisma) and the manager account. The manager then creates staff accounts and should change their own password on the Team page.
 
-1. **Import** each JSON file: n8n → Workflows → Import from File.
-2. **Create five credentials** in n8n (Credentials → Add):
-   - **GW Inventory key** (type *Header Auth*): Name `X-GW-Key`, Value = a long random string. This protects every webhook.
-   - **GW Anthropic API key** (type *Header Auth*): Name `x-api-key`, Value = an API key from console.anthropic.com (prepaid credit, set a spend limit). Not the Claude Pro plan.
-   - **GW Google Sheets**, **GW Google Drive**, **GW Gmail** (OAuth2; names start with GW so they never mix with the Inquiry Tracker's credentials): sign in with **Alvin's Google account** (alvin.nalaprana@gmail.com) for all three. Decided with GW Realty on 20 Oct 2026: the system runs on Alvin's Drive; GW Realty gets view access to photos and PDFs only, and their own Google account and data are never connected.
-3. **Open each workflow** and pick the credential on every node with a warning triangle.
-4. **GW-7 Reminder:** already set to send to the manager, manno.realtor@gmail.com.
-5. **Activate** all six workflows (toggle top right). After editing an active workflow, switch it off and on again: n8n keeps running the old copy until then.
-6. **Connect the page:** `config.js` holds both connections. Open the site once with `?live=1` on a device to use the real system there (badge shows TEST); `?demo=1` switches back. At launch, set `MODE_DEFAULT = 'live'`, commit and push.
+## Credentials in n8n
 
-## Google Drive locations (Alvin's account, already filled into the workflows)
+GW Anthropic API key (Header Auth `x-api-key`, prepaid with spend limit), GW Google Sheets, GW Google Drive, GW Gmail (OAuth2, Alvin's Google account). The old "GW Inventory key" credential is no longer used and can be deleted.
 
-- `GW Realty File/Photos` and `GW Realty File/Reports (PDF)`: share the **GW Realty File** folder with GW Realty as **Viewer**. They see photos and PDFs only.
-- `GW Realty System (private)/GW Realty Inventory Records`: the records sheet, tab **Untitled** (the workflows point at this tab by its ID, so renaming the tab is fine, deleting it is not). Header row in row 1; do not rename the headers. Not shared with GW Realty.
+## Rebuilding / updating workflows
+
+1. Edit the sources in `src/`, then `python3 n8n/src/build.py` (repo copies) and `python3 n8n/src/build.py OUT SECRETS.json` (upload copies).
+2. Paste or import into n8n, keeping the same workflow so the webhook URLs stay the same.
+3. **Switch the workflow off and on again** after any edit: n8n keeps running the old copy until then.
+
+## Google Drive locations (Alvin's account)
+
+- `GW Realty File/Photos` and `GW Realty File/Reports (PDF)`: shared with GW Realty as **Viewer**. Photos removed in the app stay here as evidence; only the folder owner deletes them.
+- `GW Realty System (private)/GW Realty Inventory Records`, tab **Records**: one row per record, full detail in `dataJson`, accounts and villas in the `_settings` row (password hashes, never sent to devices). Workflows point at the tab by ID: renaming is fine, deleting is not. Do not rename the headers.
 
 ## Switching the AI model
 
-In GW-1, node *Prepare request*, first line: `const MODEL = 'claude-haiku-5-5';`. Change to `'claude-sonnet-5-5'` if Haiku misses too much on real photos (roughly 20× the cost).
+In GW-1, node *Prepare request*: `const MODEL = 'claude-haiku-5-5';`. Change to `'claude-sonnet-5-5'` if Haiku misses too much on real photos (roughly 20× the cost).
 
-## Known limits (testing stage)
+## Known limits
 
-- **Login:** everyone signs in with email + password (the manager creates staff accounts and passwords on the Team page). Passwords are stored as hashes in the records sheet's `_settings` row. The check happens in the browser, and the webhook key is visible in the page source, so this keeps the wrong people out of the screens but is not bank-grade security. A server-side check in n8n is the next step if GW Realty needs more.
-- **Your server must be up.** If n8n is down, staff can still type items manually, but nothing saves until it is back.
-- **One record per sheet row**, full detail in the `dataJson` column (Google Sheets cell limit about 50,000 characters, enough for roughly 300 items).
-- **Each AI call sends up to 4 photos per room.** Staff can add more photos; the latest four are used.
+- No rate limit on sign-in attempts.
+- Your server must be up. If n8n is down, staff can keep working on the phone, but nothing saves until it is back.
+- One record per sheet row (Google Sheets cell limit about 50,000 characters, enough for roughly 300 items).
+- Each AI call sends up to 4 photos per room (the latest four).

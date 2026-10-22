@@ -1,42 +1,38 @@
-# GW Realty Villa Inventory — client demo
+# GW Realty Villa Inventory
 
-Live demo: https://gwrealty.netlify.app
+Site: https://gwrealty.netlify.app (later inventory.gwrealtyglobal.com). Built by Kriyator.
 
-A clickable demo of the villa inventory system for GW Realty, built by Kriyator.
+## How it works (agreed with GW Realty, 20–22 Oct 2026)
 
-## What it shows (updated 20 Oct 2026, second client meeting)
+1. **Accounts.** Everyone signs in with email + password. The password is checked on the server, which returns a signed 30-day sign-in. The manager adds villas, reviews and approves, and creates staff accounts on the Team page. Staff only do inventories on their phone.
+2. **Check-in (staff, phone).** The inventory date can differ from the tenant's check-in date. Staff photograph **every room**; a room that does not exist in the villa is removed with "Ruangan ini tidak ada di villa ini". As soon as a room has a usable photo, AI lists its items (using that villa's amenity list for the room). Staff check, edit and add items and rooms. Items with quantity 0 are removed when sending and when approving.
+3. **Dark photos** are flagged on the phone, ignored by the AI, left out of the PDF, and must be removed or retaken before sending.
+4. **AI retry.** If the AI fails or asks for a retake, "Coba AI lagi" retries without losing items staff already typed.
+5. **Manager review.** Edits and approves only. Types the agreement code, optional tenant details (email is checked if filled), inventory, check-in and check-out dates.
+6. **PDF (English).** GW Realty logo and red; inventory date when it differs from check-in; tenant acknowledgement; signature lines for Owner / Villa / Listing (Owner's Representative) and Tenant. Printed and signed on paper.
+7. **Reminder.** Email to the manager at 08:00 WITA, 7 days before check-out.
+8. **Check-out.** The check-in list is pre-filled; staff photograph every room again; AI compares and flags changes. Each item has a Result (Good / Worn / Damaged; no "missing"). Items moved to another room (e.g. a sofa bed found in Bedroom 3) are marked "Moved to …", automatically when the AI spots them in the other room, or by hand. The manager can type an optional cost per change (0 is kept as "no charge"), also after approval. The check-out PDF shows check-in and check-out photos side by side.
+9. **Photos are evidence.** A photo removed in the app stays in Google Drive; only the folder owner deletes it.
 
-1. **Inventory (staff, phone)** — the inventory date can differ from the tenant's check-in date. Staff photograph each room; as soon as a room has a usable photo, AI lists the items for that room (simulated). Staff check and edit the list, add items manually, and add rooms (quick buttons for Miscellaneous, Terrace, Bathroom, Pool area, Garden).
-2. **Dark photos** — brightness is checked on the phone the moment a photo is added. Dark photos are flagged red, ignored by the AI, left out of the PDF, and must be removed or retaken before sending.
-3. **Manager review** — the manager only edits and approves (no adding or deleting items). Types the agreement code, optional tenant details, inventory, check-in and check-out dates.
-4. **PDF** — agreement code in the header and file name; inventory date shown when it differs from the check-in date; tenant acknowledgement; signature lines for Owner / Villa / Listing (Owner's Representative) on the left and Tenant on the right. Printed and signed on paper.
-5. **Reminder** — email to the manager 7 days before check-out.
-6. **Check-out (staff)** — the check-in list is pre-filled; per room, AI compares the new photos and flags changes; staff correct; manager approves; check-out PDF shows check-in and check-out photos side by side.
-7. **Accounts** — the manager creates staff accounts on the Team page.
+Staff screens are in Indonesian; manager screens and PDFs are in English. Item names follow GW Realty's own (English) inventory documents.
 
-Staff screens are in Indonesian; manager screens and PDFs are in English.
+## Modes (config.js)
 
-## Live mode (n8n)
+- **DEMO** (default): shared demo backend on Netlify (`netlify/functions/gw.mjs`), sample villas, simulated AI, public demo accounts shown on the login screen. Same server rules as the real system.
+- **TEST / live**: open the site once with `?live=1` on a device (`?demo=1` switches back). Talks to the n8n workflows on Alvin's server: real Claude AI, photos and PDFs in Google Drive, records in the Google Sheet. At launch set `MODE_DEFAULT = 'live'`.
 
-Set `base` and `key` in `config.js` to connect to the n8n workflows in `n8n/` (setup steps in `n8n/README.md`). The badge shows TEST instead of DEMO; AI is real (Claude Haiku 5.5), records and photos sync across devices through Google Sheets and Drive, PDFs are saved to Drive.
+## Security (live)
 
-## Demo limits (when config.js is empty)
-
-- **AI is simulated.** Results come from the Villa Madya 1 item list (`data.js`), not from the photos.
-- **Nothing is sent anywhere.** Records stay in the browser (localStorage), photos in IndexedDB. Each browser has its own data. "Reset demo" on the manager page starts again.
-- **No real login.** The first screen lets you pick an account; no password in the demo.
-- **Logo:** the PDF uses a text "GW Realty" header until the client's logo file is supplied.
-- Villa Bromo is a sample lease (no photos) so the check-out flow can be tried immediately.
+- No key in the page. Each request carries the person's signed sign-in; n8n checks it, that the account still exists (removed staff lose access at once), and what that role may do (staff cannot approve, change accounts or see tenant contact details).
+- A save is refused if someone else saved a newer copy of the same record first; the app then loads the latest version.
+- Photos can only be fetched if they belong to a record.
+- Limits: no rate limit on sign-in attempts (use passwords of 8+ characters); the sign-in signing secret lives only in n8n.
 
 ## Files
 
-- `index.html`, `styles.css`, `app.js`, `data.js` — the demo (plain HTML/JS, no build step)
-- `docs/overview.html` — one-page explanation for the client
-- `docs/mockup.html` — screen mockups
-- `netlify.toml` — Netlify serves the repo root as-is
+- `index.html`, `styles.css`, `app.js`, `data.js` (rooms, demo list, GW Realty's real villas with per-room amenity lists), `config.js`
+- `netlify/functions/gw.mjs`: demo backend
+- `n8n/`: the workflows and setup notes; `n8n/src/` holds the Code node sources and `build.py`
+- `docs/overview.html`, `docs/mockup.html`: early client documents (superseded by this README where they differ)
 
 PDFs are made in the browser with jsPDF 2.5.1 and jsPDF-AutoTable 3.8.2 (loaded from cdnjs).
-
-## Next (not in the demo)
-
-Real AI (Claude API), saving to Google Sheets and Drive through n8n, real email reminders, real logins, GW Realty logo in the PDF, inventory.gwrealtyglobal.com.

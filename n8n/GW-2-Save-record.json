@@ -1,8 +1,8 @@
 {
-  "name": "GW Inventory \u00b7 2 Save record + photos",
+  "name": "GW Inventory · 2 Save record + photos",
   "nodes": [
     {
-      "id": "58a1f2f6-fb69-4948-950c-0d7ed5ff0c8b",
+      "id": "3b63d57a-c9c0-4d88-8b51-5dece01905a8",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,44 +10,68 @@
         0,
         0
       ],
-      "webhookId": "73c34747-eccc-4402-8a08-540b87ad8465",
+      "webhookId": "2ff5161a-0ac3-4f2e-8b3b-85a6f9b40634",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-record",
-        "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {
           "allowedOrigins": "*",
           "rawBody": false
         }
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "",
-          "name": "GW Inventory key"
-        }
       }
     },
     {
-      "id": "7b702ef5-0a4d-42f9-a5af-f8e11002c94e",
-      "name": "Photos to files",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "cbf29400-d626-483b-ab17-16f627b1a9cf",
+      "name": "Read records",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
       "position": [
         220,
         0
       ],
       "parameters": {
-        "jsCode": "// Input: { record: {...}, photos: [{ id, phase, room, data: \"<base64 jpeg>\" }] }\n// Output: one item per photo with binary \"data\", or one marker item if there are no new photos.\nconst b = $input.first().json.body || {};\nconst r = b.record || {};\nif (!r.id) throw new Error('record.id is required');\nconst photos = Array.isArray(b.photos) ? b.photos : [];\nif (!photos.length) return [{ json: { none: true } }];\nreturn photos.map(p => ({\n  json: { photoId: p.id, phase: p.phase, room: p.room, fileName: `${r.agreement || r.id}_${p.phase}_${p.room}_${p.id}.jpg` },\n  binary: { data: { data: String(p.data).replace(/^data:image\\/\\w+;base64,/, ''), mimeType: 'image/jpeg', fileName: `${p.id}.jpg` } }\n}));\n"
-      }
+        "documentId": {
+          "__rl": true,
+          "value": "1cNxJUgEy1X6dpenaPSc_0vIBuBLTaCrKYDcTRGHeYN8",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1891781412,
+          "mode": "list",
+          "cachedResultName": "Records"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "GW Google Sheets"
+        }
+      },
+      "alwaysOutputData": true
     },
     {
-      "id": "cdc55c3b-5d8d-4145-b908-c7dc4c1c99b4",
-      "name": "Has photos?",
-      "type": "n8n-nodes-base.if",
+      "id": "59430d29-f46c-4ba5-a7d3-fc27ae51d262",
+      "name": "Check and prepare",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "/* GW Inventory server rules, shared by the n8n Code nodes and the Netlify demo backend.\n   Plain JavaScript with no imports: n8n Code nodes block the crypto module, so SHA-256 and HMAC are implemented here. */\nfunction gwUtf8(s) { return unescape(encodeURIComponent(String(s))); }\nfunction gwSha256Bytes(bytes) {\n  const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];\n  const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];\n  const l = bytes.length, withPad = ((l + 9 + 63) >> 6) << 6, m = new Array(withPad).fill(0);\n  for (let i = 0; i < l; i++) m[i] = bytes[i];\n  m[l] = 0x80; const bits = l * 8;\n  for (let i = 0; i < 8; i++) m[withPad - 1 - i] = Math.floor(bits / Math.pow(2, 8 * i)) & 0xff;\n  const w = new Array(64), rot = (x, n) => (x >>> n) | (x << (32 - n));\n  for (let o = 0; o < withPad; o += 64) {\n    for (let i = 0; i < 16; i++) w[i] = (m[o + 4 * i] << 24) | (m[o + 4 * i + 1] << 16) | (m[o + 4 * i + 2] << 8) | m[o + 4 * i + 3];\n    for (let i = 16; i < 64; i++) {\n      const s0 = rot(w[i - 15], 7) ^ rot(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rot(w[i - 2], 17) ^ rot(w[i - 2], 19) ^ (w[i - 2] >>> 10);\n      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;\n    }\n    let [a, b, c, d, e, f, g, h] = H;\n    for (let i = 0; i < 64; i++) {\n      const t1 = (h + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;\n      const t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;\n      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;\n    }\n    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;\n    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;\n  }\n  const out = []; H.forEach(x => { for (let i = 3; i >= 0; i--) out.push((x >>> (8 * i)) & 0xff); }); return out;\n}\nconst gwStrBytes = s => { const u = gwUtf8(s), a = []; for (let i = 0; i < u.length; i++) a.push(u.charCodeAt(i)); return a; };\nconst gwHex = a => a.map(x => (x < 16 ? '0' : '') + x.toString(16)).join('');\nfunction gwSha256(s) { return gwHex(gwSha256Bytes(gwStrBytes(s))); }\nfunction gwHmac(key, msg) {\n  let k = gwStrBytes(key); if (k.length > 64) k = gwSha256Bytes(k); while (k.length < 64) k.push(0);\n  const ip = k.map(x => x ^ 0x36), op = k.map(x => x ^ 0x5c);\n  return gwHex(gwSha256Bytes(op.concat(gwSha256Bytes(ip.concat(gwStrBytes(msg))))));\n}\nconst gwToHex = s => gwHex(gwStrBytes(s));\nconst gwFromHex = h => { let u = ''; for (let i = 0; i < h.length; i += 2) u += String.fromCharCode(parseInt(h.substr(i, 2), 16)); return decodeURIComponent(escape(u)); };\nfunction gwEq(a, b) { a = String(a); b = String(b); if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; }\n\n/* ---------- passwords and tokens ---------- */\nconst GW_TOKEN_DAYS = 30;\nconst gwPwHash = (email, pw) => gwSha256(String(email).toLowerCase().trim() + ':' + pw);\nfunction gwMakeToken(u, secret, now) {\n  const p = gwToHex(JSON.stringify({ u: u.id, r: u.role, e: (now || Date.now()) + GW_TOKEN_DAYS * 864e5 }));\n  return p + '.' + gwHmac(secret, p);\n}\nfunction gwVerifyToken(tok, secret, now) {\n  const parts = String(tok || '').split('.');\n  if (parts.length !== 2 || !/^[0-9a-f]+$/.test(parts[0]) || !gwEq(gwHmac(secret, parts[0]), parts[1])) return null;\n  try { const p = JSON.parse(gwFromHex(parts[0])); if (!p.u || p.e < (now || Date.now())) return null; return { uid: p.u, role: p.r }; } catch (e) { return null; }\n}\nconst gwHeader = (headers, name) => (headers || {})[name] || (headers || {})[name.toLowerCase()] || '';\n\n/* ---------- settings (villas + accounts) ---------- */\nfunction gwSettings(records, bootUsers) {\n  const st = records.find(r => r && r.id === '_settings');\n  return st ? st : { id: '_settings', status: 'settings', villas: [], users: bootUsers || [], _boot: true };\n}\nconst gwPublicUser = u => ({ id: u.id, name: u.name, email: u.email, role: u.role });\n\nfunction gwLogin(body, records, bootUsers, secret) {\n  const email = String((body || {}).email || '').toLowerCase().trim(), pw = String((body || {}).password || '');\n  const st = gwSettings(records, bootUsers);\n  const u = (st.users || []).find(x => String(x.email || '').toLowerCase() === email);\n  if (!u || !u.pw || !pw || !gwEq(u.pw, gwPwHash(email, pw))) return { ok: false, status: 401, error: 'Email or password is not correct.' };\n  return { ok: true, status: 200, token: gwMakeToken(u, secret), user: gwPublicUser(u) };\n}\n\n/* Who is calling: token valid AND the account still exists (removed accounts lose access at once). */\nfunction gwWho(tok, records, bootUsers, secret) {\n  const t = gwVerifyToken(tok, secret);\n  if (!t) return null;\n  const u = (gwSettings(records, bootUsers).users || []).find(x => x.id === t.uid);\n  return u ? { uid: u.id, role: u.role, name: u.name } : null;\n}\n\n/* ---------- list ---------- */\nconst GW_PRIVATE = ['phone', 'email', 'idNo', 'notes'];\nfunction gwList(records, who) {\n  return records.filter(r => r && r.id).map(r => {\n    const c = JSON.parse(JSON.stringify(r));\n    if (c.id === '_settings') { delete c._boot; c.users = who.role === 'mgr' ? (c.users || []).map(gwPublicUser) : []; }\n    else if (who.role !== 'mgr') GW_PRIVATE.forEach(k => delete c[k]);\n    return c;\n  }).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));\n}\n\n/* ---------- save: permissions, overwrite protection, settings merge ---------- */\nconst GW_STAFF_STATUS = ['in_draft', 'checkin_pending', 'out_draft', 'checkout_pending'];\nfunction gwPrepareSave(record, existing, settings, who, nowIso) {\n  const r = JSON.parse(JSON.stringify(record || {}));\n  if (!r.id) return { ok: false, status: 400, error: 'record.id is required' };\n  delete r._dirty;\n  if (existing && String(existing.updatedAt || '') !== String(r.updatedAt || '')) {\n    return { ok: false, status: 409, error: 'This record was changed on another device. Reload to see the latest version.' };\n  }\n  if (r.id === '_settings') {\n    const base = settings || { villas: [], users: [] };\n    if (who.role !== 'mgr') {\n      // Staff may only add or hide rooms of existing villas (during an inventory).\n      const villas = (base.villas || []).map(v => { const nv = (r.villas || []).find(x => x.id === v.id); return nv ? Object.assign({}, v, { rooms: nv.rooms || v.rooms, hideRooms: nv.hideRooms || v.hideRooms }) : v; });\n      r.villas = villas; r.users = base.users || [];\n    } else {\n      // Keep stored password hashes; a new hash is only sent when a password is set or changed.\n      r.users = (r.users || []).map(u => {\n        const old = (base.users || []).find(x => x.id === u.id);\n        const pw = u.pw || (old && old.pw) || '';\n        return { id: u.id, name: u.name, email: String(u.email || '').trim(), role: u.role === 'mgr' ? 'mgr' : 'staff', pw };\n      });\n      if (!r.users.some(u => u.id === who.uid && u.role === 'mgr')) return { ok: false, status: 400, error: 'You cannot remove your own manager account.' };\n    }\n    r.status = 'settings';\n  } else if (who.role !== 'mgr') {\n    if (GW_STAFF_STATUS.indexOf(r.status) < 0) return { ok: false, status: 403, error: 'Only the manager can approve.' };\n    if (existing && GW_STAFF_STATUS.indexOf(existing.status) < 0 && !(existing.status === 'occupied' && r.status === 'out_draft')) {\n      return { ok: false, status: 403, error: 'This record is waiting for the manager.' };\n    }\n    if (existing) GW_PRIVATE.forEach(k => { if (existing[k] !== undefined) r[k] = existing[k]; else delete r[k]; });\n    else GW_PRIVATE.forEach(k => delete r[k]);\n  }\n  r.updatedAt = nowIso || new Date().toISOString();\n  return { ok: true, status: 200, record: r };\n}\n\n\nconst SECRET = '__GW_SECRET__';\nconst BOOT = [{ id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr', pw: '__GW_BOOT_HASH__' }];\nconst gwRows = items => { const out = []; for (const it of items) { const j = it.json || {}; if (!j.dataJson) continue; try { out.push(JSON.parse(j.dataJson)); } catch (e) { /* skip broken row */ } } return out; };\nconst deny = (status, error) => [{ json: { ok: false, status, error } }];\n\n// Check who is saving, what they may change, and that nobody saved a newer copy in the meantime.\n// Output: one item per new photo (binary \"data\"), or one item with none: true; or ok: false with an HTTP status.\nconst recs = gwRows($input.all());\nconst wh = $('Webhook').first().json;\nconst who = gwWho(gwHeader(wh.headers, 'x-gw-token'), recs, BOOT, SECRET);\nif (!who) return deny(401, 'Please sign in again.');\nconst b = wh.body || {};\nconst id = (b.record || {}).id;\nconst existing = recs.find(r => r.id === id) || null;\nconst p = gwPrepareSave(b.record, existing, gwSettings(recs, BOOT), who);\nif (!p.ok) return [{ json: p }];\nconst r = p.record;\nif (r.id !== '_settings') {\n  // Keep Drive file links only for photos the record still uses (removed photos stay in Drive as evidence).\n  const used = new Set(); ['inPhotos', 'outPhotos'].forEach(k => Object.values(r[k] || {}).forEach(l => (l || []).forEach(pid => used.add(pid))));\n  const all = Object.assign({}, (existing || {}).photoFiles, r.photoFiles);\n  r.photoFiles = {}; Object.keys(all).forEach(pid => { if (used.has(pid)) r.photoFiles[pid] = all[pid]; });\n}\nconst photos = r.id === '_settings' ? [] : (Array.isArray(b.photos) ? b.photos : []);\nif (!photos.length) return [{ json: { ok: true, none: true, _rec: r } }];\nconst safe = x => String(x || '').replace(/[^A-Za-z0-9._-]+/g, '-');\nreturn photos.map((ph, i) => Object.assign({\n  json: Object.assign({ ok: true, photoId: ph.id, fileName: `${safe(r.agreement || r.id)}_${safe(ph.phase)}_${safe(ph.room)}_${safe(ph.id)}.jpg` }, i === 0 ? { _rec: r } : {}),\n  binary: { data: { data: String(ph.data || '').replace(/^data:image\\/\\w+;base64,/, ''), mimeType: 'image/jpeg', fileName: `${safe(ph.id)}.jpg` } }\n}));\n"
+      }
+    },
+    {
+      "id": "4cc3aa72-7096-40f1-a105-d306e04d2ca6",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
         0
       ],
       "parameters": {
@@ -59,13 +83,12 @@
           },
           "conditions": [
             {
-              "id": "143b4368-d4c6-40d3-9e56-78105fe5a539",
-              "leftValue": "={{ $json.none }}",
-              "rightValue": "",
+              "id": "8bbae9b9-e366-4c1f-a2c9-3bed395fa38e",
+              "leftValue": "={{ $json.ok === false ? 0 : 1 }}",
+              "rightValue": 1,
               "operator": {
-                "type": "boolean",
-                "operation": "notTrue",
-                "singleValue": true
+                "type": "number",
+                "operation": "equals"
               }
             }
           ],
@@ -75,13 +98,45 @@
       }
     },
     {
-      "id": "7547ff0d-eb0a-4be5-b991-ab5cbc430be8",
+      "id": "cea5a3b5-8778-420e-8964-98de0d9055ab",
+      "name": "Has photos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "31b6d6ac-fa9e-454e-9881-8a58a8f63f98",
+              "leftValue": "={{ $json.none === true ? 0 : 1 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4d691fe6-b22c-4e6b-ba7c-a371524f552c",
       "name": "Upload photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        660,
-        -100
+        1100,
+        -200
       ],
       "parameters": {
         "name": "={{ $json.fileName }}",
@@ -106,26 +161,26 @@
       }
     },
     {
-      "id": "91cd7396-ab14-43ca-a9e3-36acdc650563",
+      "id": "fe0453bb-2381-42de-bd5c-ef30b399f3d0",
       "name": "Build row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
-        0
+        1320,
+        -100
       ],
       "parameters": {
-        "jsCode": "// Build the Records sheet row. Photo file IDs from Google Drive are merged into record.photoFiles.\nconst b = $('Webhook').first().json.body || {};\nconst r = Object.assign({}, b.record || {});\nr.photoFiles = Object.assign({}, r.photoFiles || {});\nif ($('Upload photo').isExecuted) {\n  const meta = $('Photos to files').all().map(i => i.json);\n  $('Upload photo').all().forEach((it, i) => { const m = meta[i]; if (m && m.photoId && it.json.id) r.photoFiles[m.photoId] = it.json.id; });\n}\nr.updatedAt = new Date().toISOString();\nreturn [{ json: {\n  recordId: r.id, agreement: r.agreement || '', villa: r.villaName || r.villaId || '', tenant: r.tenant || '',\n  status: r.status || '', invDate: r.invDate || '', checkIn: r.checkIn || '', checkOut: r.checkOut || '',\n  outInvDate: r.outInvDate || '', updatedAt: r.updatedAt, dataJson: JSON.stringify(r),\n  _photoFiles: r.photoFiles\n} }];\n"
+        "jsCode": "// Build the Records sheet row. Drive file IDs of uploaded photos are added to record.photoFiles.\nconst items = $('Check and prepare').all();\nconst r = items[0].json._rec;\nr.photoFiles = Object.assign({}, r.photoFiles || {});\nif ($('Upload photo').isExecuted) {\n  $('Upload photo').all().forEach((it, i) => { const m = (items[i] || {}).json; if (m && m.photoId && it.json.id) r.photoFiles[m.photoId] = it.json.id; });\n}\nreturn [{ json: {\n  recordId: r.id, agreement: r.agreement || '', villa: r.villaName || r.villaId || '', tenant: r.tenant || '',\n  status: r.status || '', invDate: r.invDate || '', checkIn: r.checkIn || '', checkOut: r.checkOut || '',\n  outInvDate: r.outInvDate || '', updatedAt: r.updatedAt, dataJson: JSON.stringify(r),\n  _photoFiles: r.photoFiles\n} }];\n"
       }
     },
     {
-      "id": "5fc52aaa-45de-4758-9ac0-6aca5a4f240b",
+      "id": "8f611d21-3fba-4aac-876b-e8a952136fc6",
       "name": "Upsert record",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        1100,
-        0
+        1540,
+        -100
       ],
       "parameters": {
         "operation": "appendOrUpdate",
@@ -136,9 +191,9 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "gid=0",
+          "value": 1891781412,
           "mode": "list",
-          "cachedResultName": "Sheet1"
+          "cachedResultName": "Records"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -270,18 +325,35 @@
       }
     },
     {
-      "id": "6aaa5090-145f-4e3e-ac7e-7612abd36ee0",
+      "id": "a3ba3475-bc1c-4fc4-91c8-08cf0e954513",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1320,
-        0
+        1760,
+        -100
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: true, recordId: $('Build row').first().json.recordId, photoFiles: $('Build row').first().json._photoFiles }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: true, recordId: $('Build row').first().json.recordId, photoFiles: $('Build row').first().json._photoFiles, updatedAt: $('Build row').first().json.updatedAt }) }}",
         "options": {}
+      }
+    },
+    {
+      "id": "01d94613-323f-499f-85c7-7c80c14d9361",
+      "name": "Refuse",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 500 }}"
+        }
       }
     }
   ],
@@ -290,18 +362,47 @@
       "main": [
         [
           {
-            "node": "Photos to files",
+            "node": "Read records",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Photos to files": {
+    "Read records": {
+      "main": [
+        [
+          {
+            "node": "Check and prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check and prepare": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
       "main": [
         [
           {
             "node": "Has photos?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuse",
             "type": "main",
             "index": 0
           }
@@ -365,8 +466,5 @@
     "executionOrder": "v1",
     "timezone": "Asia/Makassar"
   },
-  "pinData": {},
-  "meta": {
-    "templateCredsSetupCompleted": false
-  }
+  "pinData": {}
 }

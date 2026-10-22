@@ -1,6 +1,7 @@
-/* GW Realty Inventory — client demo.
-   Everything runs in the browser: records in localStorage, photos in IndexedDB.
-   The "AI" step is simulated with the Villa Madya 1 item list. Nothing is sent anywhere. */
+/* GW Realty Inventory.
+   Records are kept on the device (localStorage, photos in IndexedDB) and synced with the server:
+   the Netlify demo backend (DEMO) or the n8n workflows on Alvin's server (TEST/live).
+   Sign-in, permissions and overwrite protection are checked on the server. */
 (function () {
   'use strict';
 
@@ -29,7 +30,10 @@
   const daysUntil = s => Math.round((parse(s) - today()) / 864e5);
   const allRooms = () => ROOMS.concat(...((S && S.villas) || []).map(v => v.rooms || []));
   const roomName = (id, lang) => { const r = allRooms().find(x => x.id === id); return r ? (lang === 'id' ? r.id_ : r.en) : id; };
-  const roomsFor = vid => { const v = (S.villas || []).find(x => x.id === vid); return ROOMS.concat((v && v.rooms) || []); };
+  const roomsFor = vid => { const v = (S.villas || []).find(x => x.id === vid) || {}; const hide = v.hideRooms || []; return ROOMS.filter(x => hide.indexOf(x.id) < 0).concat(v.rooms || []); };
+  const roomObj = id => allRooms().find(x => x.id === id);
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const hasCost = c => c !== '' && c !== null && c !== undefined && !isNaN(Number(c));
   const count = obj => Object.values(obj || {}).reduce((a, v) => a + (v ? v.length : 0), 0);
 
   /* ---------- state ---------- */
@@ -66,7 +70,11 @@
     try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
     if (!S || S.v !== 7) S = seed();
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* demo still works in memory */ } }
+  let saveWarned = false;
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
+    catch (e) { if (!saveWarned) { saveWarned = true; toast(T('Memori perangkat penuh: data belum tersimpan di perangkat. Kirim sekarang atau kosongkan memori.', 'This device could not store the data (storage full or blocked). Save to the server now.')); } return false; }
+  }
   const L = () => (S.role === 'mgr' ? 'en' : 'id');
   const T = (id, en) => (L() === 'id' ? id : en);
   const villa = id => S.villas.find(v => v.id === id);
@@ -77,17 +85,30 @@
 
   /* ---------- n8n connection (live mode) ---------- */
   const API = window.GW_API || {};
-  const LIVE = !!(API.base && API.key);
+  const LIVE = !!API.base;
   const b64 = dataUrl => String(dataUrl).split(',')[1] || '';
   async function api(path, opts) {
     opts = opts || {};
-    const res = await fetch(API.base.replace(/\/$/, '') + '/' + path, {
-      method: opts.method || 'GET',
-      headers: Object.assign({ 'X-GW-Key': API.key }, opts.body ? { 'Content-Type': 'application/json' } : {}),
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const headers = Object.assign({}, API.key ? { 'X-GW-Key': API.key } : {}, S.token ? { 'X-GW-Token': S.token } : {}, opts.body ? { 'Content-Type': 'application/json' } : {});
+    const res = await fetch(API.base.replace(/\/$/, '') + '/' + path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+    if (!res.ok) {
+      let msg = ''; try { msg = (await res.json()).error || ''; } catch (e) { /* not json */ }
+      const err = new Error(msg || 'HTTP ' + res.status); err.status = res.status;
+      if (res.status === 401 && path !== 'gw-login' && S.user) { S.user = null; S.role = null; S.token = null; save(); toast('Please sign in again. / Silakan masuk lagi.'); go('#/login'); }
+      throw err;
+    }
     return opts.blob ? res.blob() : res.json();
+  }
+  // A save was refused because another device changed the record first: take the server copy.
+  function onSaveError(r, e, msg) {
+    if (e && e.status === 409) {
+      S.records = S.records.filter(x => x.id !== r.id); save();
+      toast(T('Data ini sudah diubah di perangkat lain. Menampilkan versi terbaru.', 'This record was changed on another device. Showing the latest version.'));
+      pullAll(true).then(() => render(true));
+      return;
+    }
+    if (e && e.status === 401) return;
+    toast((e && e.status === 403 && e.message) ? e.message : msg);
   }
   async function pushRecord(r) {
     if (!LIVE) return;
@@ -99,41 +120,57 @@
       if (p && !p.dark) pending.push({ id, phase: ph, room, data: b64(p.data) });
     }
     const send = async photos => {
-      const rec = Object.assign({}, r, { villaName: (villa(r.villaId) || {}).name || '' });
+      const rec = Object.assign({}, r, { villaName: (villa(r.villaId) || {}).name || '' }); delete rec._dirty;
       const res = await api('gw-save-record', { method: 'POST', body: { record: rec, photos } });
-      if (res && res.photoFiles) { r.photoFiles = Object.assign(r.photoFiles, res.photoFiles); save(); }
+      if (res && res.photoFiles) r.photoFiles = Object.assign(r.photoFiles, res.photoFiles);
+      if (res && res.updatedAt) r.updatedAt = res.updatedAt;
+      save();
     };
-    if (!pending.length) { await send([]); return; }
-    for (let i = 0; i < pending.length; i += 5) await send(pending.slice(i, i + 5));
+    r._dirty = true; save();
+    if (!pending.length) await send([]);
+    else for (let i = 0; i < pending.length; i += 5) await send(pending.slice(i, i + 5));
+    delete r._dirty; save();
   }
   async function pushSettings() {
     if (!LIVE) return;
-    try { await api('gw-save-record', { method: 'POST', body: { record: { id: '_settings', status: 'settings', villas: S.villas, users: S.users }, photos: [] } }); }
-    catch (e) { toast('Could not save settings to the server. Check the connection.'); }
+    const users = (S.users || []).map(u => Object.assign({ id: u.id, name: u.name, email: u.email, role: u.role }, u.pwNew ? { pw: u.pwNew } : {}));
+    try {
+      const res = await api('gw-save-record', { method: 'POST', body: { record: { id: '_settings', status: 'settings', villas: S.villas, users, updatedAt: S.settingsAt || '' }, photos: [] } });
+      if (res && res.updatedAt) S.settingsAt = res.updatedAt;
+      (S.users || []).forEach(u => delete u.pwNew); save();
+    } catch (e) {
+      if (e.status === 409) { toast(T('Pengaturan diubah di perangkat lain. Memuat versi terbaru.', 'Settings were changed on another device. Loading the latest version; please repeat your change.')); pullAll(true).then(() => render(true)); }
+      else if (e.status !== 401) toast(T('Gagal menyimpan ke server. Cek koneksi.', e.message && e.status === 400 ? e.message : 'Could not save settings to the server. Check the connection.'));
+    }
   }
   let lastPull = 0, pulling = false;
   async function pullAll(force) {
-    if (!LIVE || pulling || (!force && Date.now() - lastPull < 5000)) return false;
+    if (!LIVE || !S.token || pulling || (!force && Date.now() - lastPull < 5000)) return false;
     pulling = true;
     try {
       const res = await api('gw-records');
       const recs = (res && res.records) || [];
       const st = recs.find(x => x.id === '_settings');
-      if (st) { if (Array.isArray(st.villas) && st.villas.length) S.villas = st.villas; if (Array.isArray(st.users) && st.users.length) S.users = st.users; }
-      else {
-        // Fresh shared storage: seed it with this device's villas, users and sample lease.
-        if (REAL) S.records = [];   // real system: start with villas and accounts only, no sample leases
+      if (st) {
+        S.settingsAt = st.updatedAt || '';
+        if (Array.isArray(st.villas)) S.villas = st.villas;
+        if (S.role === 'mgr' && Array.isArray(st.users) && st.users.length) S.users = st.users.map(u => { const old = (S.users || []).find(x => x.id === u.id); return old && old.pwNew ? Object.assign({}, u, { pwNew: old.pwNew }) : u; });
+      } else if (S.role === 'mgr') {
+        // Fresh storage: the manager seeds it. Real system: GW Realty's villas and only the manager's own account, no sample leases.
+        if (REAL) { S.records = []; S.villas = JSON.parse(JSON.stringify(window.GW_REAL_VILLAS || [])); S.users = (S.users || []).filter(u => u.id === S.user); }
+        S.settingsAt = '';
         await pushSettings();
-        for (const r of S.records) await pushRecord(r);
+        for (const r of S.records) { delete r.updatedAt; await pushRecord(r).catch(() => {}); }
         lastPull = Date.now(); save(); return true;
       }
       const server = recs.filter(x => x.id !== '_settings');
       const local = S.records;
-      S.records = server.map(sr => { const lr = local.find(x => x.id === sr.id); return lr && (lr.status === 'in_draft' || lr.status === 'out_draft') && sr.status !== 'checkin_pending' && sr.status !== 'checkout_pending' && sr.status !== 'closed' ? lr : sr; })
-        .concat(local.filter(lr => !server.some(sr => sr.id === lr.id) && (lr.status === 'in_draft' || lr.status === 'out_draft')));
+      const keepLocal = (lr, sr) => lr && (lr._dirty || ((lr.status === 'in_draft' || lr.status === 'out_draft') && sr.status !== 'checkin_pending' && sr.status !== 'checkout_pending' && sr.status !== 'closed'));
+      S.records = server.map(sr => { const lr = local.find(x => x.id === sr.id); if (!keepLocal(lr, sr)) return sr; if (!lr._dirty) lr.updatedAt = sr.updatedAt; return lr; })
+        .concat(local.filter(lr => !server.some(sr => sr.id === lr.id) && (lr._dirty || lr.status === 'in_draft' || lr.status === 'out_draft')));
       lastPull = Date.now(); save();
       return true;
-    } catch (e) { toast('Server not reachable. Showing data saved on this device.'); lastPull = Date.now(); return false; }
+    } catch (e) { if (e.status !== 401) toast(T('Server tidak dapat dihubungi. Menampilkan data yang tersimpan di perangkat ini.', 'Server not reachable. Showing data saved on this device.')); lastPull = Date.now(); return false; }
     finally { pulling = false; }
   }
   /* ---------- photos (IndexedDB + memory cache) ---------- */
@@ -159,7 +196,7 @@
         t.onerror = () => rej(t.error);
       });
     },
-    put(id, v) { return this.tx('readwrite', s => s.put(v, id)).catch(() => {}); },
+    put(id, v) { return this.tx('readwrite', s => s.put(v, id)); },
     get(id) { return this.tx('readonly', s => s.get(id)).catch(() => null); },
     del(id) { return this.tx('readwrite', s => s.delete(id)).catch(() => {}); },
     clear() { return this.tx('readwrite', s => s.clear()).catch(() => {}); }
@@ -180,7 +217,7 @@
           const data = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
           const dim = await new Promise(res => { const im = new Image(); im.onload = () => res([im.naturalWidth, im.naturalHeight]); im.onerror = () => res([4, 3]); im.src = data; });
           p = { data, w: dim[0], h: dim[1], dark: false, remote: true };
-          IDB.put(id, p);
+          IDB.put(id, p).catch(() => {});
         } catch (e) { p = null; }
       }
     }
@@ -229,13 +266,13 @@
     document.body.appendChild(t); setTimeout(() => t.remove(), 3200);
   }
   function overlay(msg) {
-    const o = document.createElement('div'); o.className = 'overlay';
+    const o = document.createElement('div'); o.className = 'overlay'; o.setAttribute('role', 'status'); o.setAttribute('aria-live', 'polite');
     o.innerHTML = `<div class="card"><div class="spin"></div><p>${esc(msg)}</p></div>`;
     document.body.appendChild(o); return () => o.remove();
   }
   function lightbox(src) {
     const o = document.createElement('div'); o.className = 'overlay lb';
-    o.innerHTML = `<img alt="Photo" src="${src}">`;
+    const im = document.createElement('img'); im.alt = 'Photo'; if (/^(data:image\/|blob:|https:)/.test(src)) im.src = src; o.appendChild(im);
     o.addEventListener('click', () => o.remove());
     document.addEventListener('keydown', function k(e) { if (e.key === 'Escape') { o.remove(); document.removeEventListener('keydown', k); } });
     document.body.appendChild(o);
@@ -261,10 +298,11 @@
     viewToken++;
     const p = location.hash.replace(/^#\/?/, '').split('/');
     const u = curUser();
-    if ((p[0] === 'staff' || p[0] === 'mgr') && (!u || u.role !== p[0])) { location.hash = '#/login'; return; }
+    if ((p[0] === 'staff' || p[0] === 'mgr') && (!u || u.role !== p[0])) { location.hash = u ? '#/' + u.role : '#/login'; return; }
     if (p[0] === 'staff') S.role = 'staff';
     if (p[0] === 'mgr') S.role = 'mgr';
     if (p[0] === '' && S.role) { go(S.role === 'mgr' ? '#/mgr' : '#/staff'); return; }
+    document.documentElement.lang = S.role === 'staff' ? 'id' : 'en';
     renderBar();
     if (p[0] === 'staff' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'staff') { viewStaffHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'staff') render(true); }); }
@@ -281,7 +319,7 @@
 
   /* ---------- login ---------- */
   function viewLogin() {
-    S.role = null; S.user = null; renderBar();
+    S.role = null; S.user = null; S.token = null; document.documentElement.lang = 'en'; renderBar();
     const demo = !LIVE || (API.label || '').toUpperCase() === 'DEMO';
     app.innerHTML = `<div class="login">
       <p class="eyebrow">GW Realty</p>
@@ -290,7 +328,7 @@
       <form class="card" id="loginForm" autocomplete="on">
         <div class="fld"><label for="lgEmail">Email</label><input id="lgEmail" type="email" autocomplete="username" required></div>
         <div class="fld"><label for="lgPw">Password</label><input id="lgPw" type="password" autocomplete="current-password" required></div>
-        <p class="err" id="lgErr" hidden></p>
+        <p class="err" role="alert" id="lgErr" hidden></p>
         <button class="btn block" type="submit">Sign in</button>
       </form>
       ${demo ? `<div class="card"><h3>Demo accounts</h3>
@@ -313,19 +351,20 @@
         <div class="form">
           <div class="fld"><label for="nuName">Name</label><input id="nuName" placeholder="e.g. Komang"></div>
           <div class="fld"><label for="nuEmail">Email</label><input id="nuEmail" type="email" placeholder="komang@gwrealtyglobal.com"></div>
-          <div class="fld"><label for="nuPw">Password</label><input id="nuPw" type="text" autocomplete="off" placeholder="At least 6 characters"></div>
+          <div class="fld"><label for="nuPw">Password</label><input id="nuPw" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div>
         </div>
-        <p class="err" id="nuErr" hidden></p>
+        <p class="err" role="alert" id="nuErr" hidden></p>
         <button class="btn" data-act="addUser">Create account</button>
       </div>
       <div class="card">
         <h3>Change a password</h3>
         <div class="form">
           <div class="fld"><label for="cpUser">Account</label><select id="cpUser">${S.users.map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}</select></div>
-          <div class="fld"><label for="cpPw">New password</label><input id="cpPw" type="text" autocomplete="off" placeholder="At least 6 characters"></div>
+          <div class="fld"><label for="cpPw">New password</label><input id="cpPw" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div>
         </div>
-        <p class="err" id="cpErr" hidden></p>
+        <p class="err" role="alert" id="cpErr" hidden></p>
         <button class="btn ghost" data-act="setPw">Save new password</button>
+        <label class="note"><input type="checkbox" data-act="showPw"> Show passwords while typing</label>
         <p class="note">Use this when staff forget their password, or to change the manager's own password.</p>
       </div>
     </div>`;
@@ -354,7 +393,7 @@
       <div class="head"><div><p class="eyebrow">Halo, ${esc((curUser() || {}).name || '')}</p><h1>Villa</h1></div></div>
       <p class="sub">Pilih villa untuk check-in atau check-out. Cukup ambil foto, daftar barang dibuat otomatis.</p>
       <div class="vlist">${cards}</div>
-      <p class="note">${LIVE ? 'Demo: data tersambung ke manajer.' : 'Demo: data hanya tersimpan di browser ini.'}</p>
+      ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data tersambung ke manajer.' : 'Demo: data hanya tersimpan di browser ini.'}</p>`}
     </div>`;
   }
 
@@ -384,12 +423,14 @@
     const checked = list.length && !list[0].unchecked;
     if (!checked) return `<p class="note">${list.length} barang dari check-in. Ambil foto, AI akan mencocokkan.</p>`;
     const label = res => ({ ok: 'Sama', wr: 'Aus', rd: 'Rusak', gy: 'Belum difoto' }[res.k] || res.t);
+    const others = capRooms(r, 'out').filter(x => x.id !== k);
     const row = it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td><b>${esc(it.name)}</b>${it.note ? `<br><span class="note">${esc(it.note)}</span>` : ''}</td><td>${it.inQty} · ${CONDS_ID[it.inCond]}</td>
-      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Hasil check-out">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
-      <td>${chip(res.k, label(res))}</td></tr>`; };
-    const head = '<tr><th>Barang</th><th>Check-in</th><th>Hasil</th><th></th></tr>';
+      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Hasil check-out">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select>
+      <select class="mvsel" data-ok="movedTo" data-room="${k}" data-iid="${it.id}" aria-label="Lokasi barang"><option value="">Di ruangan ini</option>${others.map(o => `<option value="${o.id}"${it.movedTo === o.id ? ' selected' : ''}>Pindah ke ${esc(o.id_)}</option>`).join('')}</select></td>
+      <td>${chip(res.k, res.k === 'mv' ? `Pindah ke ${roomName(it.movedTo, 'id')}` : label(res))}</td></tr>`; };
+    const head = '<tr><th>Barang</th><th>Check-in</th><th>Hasil / lokasi</th><th></th></tr>';
     const ch = list.filter(it => isChange(result(it)));
-    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} perubahan` : 'tidak ada perubahan'}.</b> Pilih hasil untuk tiap barang: Baik, Aus atau Rusak.</p>
+    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} perubahan` : 'tidak ada perubahan'}.</b> Pilih hasil untuk tiap barang: Baik, Aus atau Rusak. Kalau barang dipindah ke ruangan lain (mis. sofa bed ada di Kamar 3), pilih "Pindah ke" dan foto barangnya di ruangan itu.</p>
       ${ch.length ? `<div style="overflow-x:auto"><table class="itbl">${head}${ch.map(row).join('')}</table></div>` : ''}
       <details class="all"><summary>Lihat semua ${list.length} barang</summary><div style="overflow-x:auto"><table class="itbl">${head}${list.map(row).join('')}</table></div></details></div>`;
   }
@@ -422,6 +463,8 @@
         </div>
         ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, 'id'))}<span class="old" data-old="${pid}" hidden>Foto lama</span><span class="dark" data-dark="${pid}" hidden>Terlalu gelap</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="Hapus foto">×</button></div>`).join('')}</div>` : ''}
         ${(r.aiNote || {})[phase + ':' + room.id] ? `<div class="banner rd">AI: ${esc(r.aiNote[phase + ':' + room.id])} Ambil ulang foto ruangan ini.</div>` : ''}
+        ${!busy && ((r.aiState || {})[phase + ':' + room.id] === 'fail' || (r.aiState || {})[phase + ':' + room.id] === 'retake') && list.length ? `<button class="btn ghost sm" data-act="retryAi" data-room="${room.id}">↻ Coba AI lagi</button>` : ''}
+        ${phase === 'in' && !list.length && !((r.inItems || {})[room.id] || []).length ? `<button class="linkbtn" data-act="hideRoom" data-v="${r.villaId}" data-room="${room.id}">Ruangan ini tidak ada di villa ini</button>` : ''}
         <div class="banner rd" data-darkmsg="${room.id}" hidden>Foto terlalu gelap, AI tidak bisa membacanya. Nyalakan lampu atau buka tirai, lalu ambil ulang. Hapus foto yang gelap.</div>
         ${body}
       </section>`;
@@ -435,7 +478,7 @@
         <p class="note">${phase === 'in' ? 'Boleh berbeda dengan tanggal check-in penyewa.' : 'Tanggal pengecekan saat check-out.'}</p></div>
       <p class="sub">Ambil foto setiap ruangan. AI langsung membuat daftar barang di ruangan itu, lalu kamu cek dan perbaiki sebelum dikirim ke manajer.</p>
       ${phase === 'out' ? `<div class="banner">Ambil foto dari sudut yang sama dengan foto check-in.</div>` : ''}
-      <p class="note" id="busy" hidden></p>
+      <p class="note" id="busy" aria-live="polite" hidden></p>
       ${rooms}
       ${phase === 'in' ? `<div class="card addroom">
         <h3>Tambah ruangan atau barang lain-lain</h3>
@@ -444,7 +487,7 @@
         <p class="note">Ruangan baru tersimpan untuk villa ini dan muncul lagi di check-in dan check-out berikutnya.</p>
       </div>` : ''}
       <div class="sticky">
-        <p class="err" id="sendErr" hidden></p>
+        <p class="err" role="alert" id="sendErr" hidden></p>
         <button class="btn block" data-act="send" data-r="${r.id}">Kirim ke manajer (${total} foto)</button>
       </div>
     </div>`;
@@ -472,46 +515,71 @@
         if (p.old) oldN++;
         if (p.dark) darkN++;
         const id = uid();
-        PC.set(id, p); await IDB.put(id, p);
+        try { await IDB.put(id, p); } catch (e2) { if (window.indexedDB) { toast('Memori perangkat penuh: foto tidak bisa disimpan. Kosongkan memori lalu ambil ulang.'); continue; } }
+        PC.set(id, p);
         (r[phase + 'Photos'][room] = r[phase + 'Photos'][room] || []).push(id);
         save();
       } catch (e) { toast('Satu foto tidak bisa dibaca. Coba foto JPG atau PNG.'); }
     }
     if (darkN) toast(`${darkN} foto terlalu gelap. Ambil ulang dengan cahaya lebih terang.`);
     else if (oldN) toast(`${oldN} foto diambil lebih dari 24 jam lalu. Ditandai "Foto lama".`);
+    const st = (r.aiState || {})[phase + ':' + room];
     const good = await goodPhotos(r[phase + 'Photos'][room]);
-    const needAi = good.length && (phase === 'in' ? !(r.inItems || {})[room] : ((r.outItems || {})[room] || [{}])[0].unchecked);
+    const needAi = good.length && (st === 'fail' || st === 'retake' || (phase === 'in' ? !((r.inItems || {})[room] || []).length : ((r.outItems || {})[room] || [{}])[0].unchecked));
     if (!needAi) { render(true); return; }
+    runAi(r, phase, room, good);
+  }
+  // Merge AI items into a list staff may already have edited: keep their rows, add only new names.
+  function mergeInItems(cur, fresh) {
+    if (!cur || !cur.length) return fresh;
+    const have = new Set(cur.map(i => i.name.trim().toLowerCase()));
+    return cur.concat(fresh.filter(i => !have.has(i.name.trim().toLowerCase())));
+  }
+  async function runAi(r, phase, room, good) {
+    r.aiState = r.aiState || {};
     const key = `${r.id}:${phase}:${room}`;
     BUSY.add(key); render(true);
     const sec = document.getElementById('room-' + room); if (sec) sec.scrollIntoView({ block: 'nearest' });
     const finish = msg => { BUSY.delete(key); save(); if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(msg); } };
     const okMsg = phase === 'in' ? `AI selesai: ${roomName(room, 'id')}. Cek daftarnya.` : `AI selesai mencocokkan ${roomName(room, 'id')}.`;
-    if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); finish(okMsg); }, 1600); return; }
+    if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); r.aiState[phase + ':' + room] = 'ok'; finish(okMsg); }, 1600); return; }
     try {
       const photosB64 = [];
       for (const pid of good.slice(-4)) { const p = await getPhoto(pid); if (p) photosB64.push(b64(p.data)); }
       const body = { phase, villa: villa(r.villaId).name, room: roomName(room, 'en'), photos: photosB64 };
-      if (phase === 'in' && CAT[room]) body.expected = CAT[room];
+      const ro = roomObj(room);
+      if (phase === 'in' && ro && Array.isArray(ro.cat) && ro.cat.length) body.expected = ro.cat;
+      else if (phase === 'in' && CAT[room] && !REAL) body.expected = CAT[room];
       if (phase === 'out') body.checkin = r.outItems[room].map(i => ({ id: i.id, name: i.name, qty: i.inQty, cond: i.inCond }));
       const res = await api('gw-ai-room', { method: 'POST', body });
       if (!res || !res.ok) throw new Error((res && res.error) || 'AI error');
       r.aiNote = r.aiNote || {};
       if (res.quality === 'retake') r.aiNote[phase + ':' + room] = res.quality_note || 'Foto kurang jelas.'; else delete r.aiNote[phase + ':' + room];
+      r.aiState[phase + ':' + room] = res.quality === 'retake' ? 'retake' : 'ok';
       if (phase === 'in') {
-        r.inItems[room] = (res.items || []).map(i => ({ id: uid(), name: i.name, qty: i.qty, cond: i.cond, note: i.note || '', src: 'ai', flag: i.small ? 'small' : '' }));
+        r.inItems = r.inItems || {};
+        r.inItems[room] = mergeInItems(r.inItems[room], (res.items || []).map(i => ({ id: uid(), name: i.name, qty: i.qty, cond: i.cond, note: i.note || '', src: 'ai', flag: i.small ? 'small' : '' })));
       } else {
         const list = r.outItems[room];
-        (res.items || []).forEach(x => { const it = list.find(i => i.id === x.id); if (!it) return; it.unchecked = false;
+        (res.items || []).forEach(x => { const it = list.find(i => i.id === x.id); if (!it || it.movedTo) return; it.unchecked = false;
           it.cond = x.cond; it.note = x.seen ? (x.note || '') : 'Not visible in photo';
           if (x.seen && x.qty < it.inQty) { it.cond = 'Damaged'; it.note = `${it.inQty - x.qty} missing${x.note ? '; ' + x.note : ''}`; } });
-        list.forEach(it => { if (it.unchecked) { it.unchecked = false; it.note = 'Not visible in photo'; } });
-        (res.extra || []).forEach(e => list.push({ id: uid(), name: e.name, inQty: 0, inCond: 'Good', inNote: '', qty: parseInt(e.qty, 10) || 1, cond: e.cond || 'Good', note: e.note || 'Not on check-in list', unchecked: false, touched: false }));
+        list.forEach(it => { if (it.unchecked && !it.movedTo) { it.unchecked = false; it.note = 'Not visible in photo'; } });
+        (res.extra || []).forEach(e => {
+          // An "extra" item that matches a check-in item from another room was moved here (e.g. sofa bed from the living room to Bedroom 3).
+          const nm = String(e.name || '').trim().toLowerCase();
+          let src = null;
+          Object.keys(r.outItems).forEach(k2 => { if (k2 === room || src) return; const it2 = r.outItems[k2].find(i => !i.movedTo && i.inQty > 0 && i.name.trim().toLowerCase() === nm && (i.unchecked || i.note === 'Not visible in photo')); if (it2) src = it2; });
+          if (src) { src.movedTo = room; src.unchecked = false; src.cond = CONDS.indexOf(e.cond) >= 0 ? e.cond : src.cond; src.note = e.note || ''; return; }
+          list.push({ id: uid(), name: e.name, inQty: 0, inCond: 'Good', inNote: '', qty: parseInt(e.qty, 10) || 1, cond: e.cond || 'Good', note: e.note || 'Not on check-in list', unchecked: false, touched: false });
+        });
       }
       finish(res.quality === 'retake' ? 'AI: foto kurang jelas. Cek catatan di ruangan itu.' : okMsg);
     } catch (e) {
-      if (phase === 'in') r.inItems[room] = r.inItems[room] || [];
-      finish('AI tidak bisa dihubungi. Isi barang manual, atau tambah foto untuk mencoba lagi.');
+      if (phase === 'in') { r.inItems = r.inItems || {}; r.inItems[room] = r.inItems[room] || []; }
+      r.aiState[phase + ':' + room] = 'fail';
+      if (e && e.status === 401) { BUSY.delete(key); return; }
+      finish('AI tidak bisa dihubungi. Tekan "Coba AI lagi", atau isi barang manual.');
     }
   }
 
@@ -521,17 +589,22 @@
     const err = document.getElementById('sendErr');
     const total = count(photos);
     if (!total) { err.hidden = false; err.textContent = 'Tambahkan minimal satu foto.'; return; }
-    for (const ids of Object.values(photos)) { for (const pid of ids) { const p = await getPhoto(pid); if (p && p.dark) { err.hidden = false; err.textContent = 'Masih ada foto yang terlalu gelap. Hapus foto itu (tanda merah) atau ambil ulang dulu.'; return; } } }
+    for (const ids of Object.values(photos)) { for (const pid of ids) {
+      const p = await getPhoto(pid);
+      if (!p && !(r.photoFiles || {})[pid]) { err.hidden = false; err.textContent = 'Ada foto yang hilang dari perangkat ini (memori penuh?). Hapus foto yang kosong lalu ambil ulang.'; return; }
+      if (p && p.dark) { err.hidden = false; err.textContent = 'Masih ada foto yang terlalu gelap. Hapus foto itu (tanda merah) atau ambil ulang dulu.'; return; }
+    } }
     if (phase === 'in') {
+      const z = dropZeroQty(r);
+      if (z) toast(`${z} barang dengan jumlah 0 dihapus dari daftar.`);
       const blank = Object.values(r.inItems || {}).some(l => l.some(i => !i.name.trim()));
       if (blank) { err.hidden = false; err.textContent = 'Ada barang tanpa nama. Isi atau hapus.'; return; }
       if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'Daftar barang masih kosong. Tunggu AI selesai atau tambah barang.'; return; }
     }
     const missing = capRooms(r, phase).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id, 'id'));
-    if (missing.length && !confirmMissing) {
-      confirmMissing = true;
+    if (missing.length) {
       err.hidden = false;
-      err.textContent = `Belum ada foto: ${missing.join(', ')}. Tekan sekali lagi untuk tetap kirim.`;
+      err.textContent = `Foto wajib untuk semua ruangan. Belum ada foto: ${missing.join(', ')}.${phase === 'in' ? ' Kalau ruangan itu tidak ada di villa ini, tekan "Ruangan ini tidak ada di villa ini".' : ''}`;
       return;
     }
     const done = overlay(LIVE ? 'Mengunggah foto dan data…' : 'Mengirim ke manajer…');
@@ -541,8 +614,9 @@
     try {
       if (LIVE) await pushRecord(r); else await new Promise(res => setTimeout(res, 1000));
     } catch (e) {
-      r.status = prev; save(); done();
-      err.hidden = false; err.textContent = 'Gagal mengirim. Cek koneksi internet, lalu tekan Kirim lagi.';
+      r.status = prev; delete r._dirty; save(); done();
+      if (e.status === 409 || e.status === 401) { onSaveError(r, e, ''); return; }
+      err.hidden = false; err.textContent = e.status === 403 && e.message ? e.message : 'Gagal mengirim. Cek koneksi internet, lalu tekan Kirim lagi.';
       return;
     }
     done();
@@ -583,7 +657,7 @@
     const upcoming = S.records.filter(r => (r.status === 'occupied' || r.status === 'out_draft') && r.checkOut).sort((a, b) => a.checkOut.localeCompare(b.checkOut));
     const rem = upcoming.length ? upcoming.map(r => {
       const d = daysUntil(r.checkOut);
-      const rs = remindersFor(r).map(x => `${fmt(x.d)} (7 days before${x.sent ? ', sent' : ''})`).join(' · ');
+      const rs = remindersFor(r).map(x => `${fmt(x.d)} (7 days before${x.sent ? (REAL ? ', date passed' : ', simulated') : ''})`).join(' · ');
       return `<div class="tg"><b>⏰ ${esc(villa(r.villaId).name)}</b>Check-out ${fmt(r.checkOut)}${d >= 0 ? ` · in ${d} day${d === 1 ? '' : 's'}` : ' · overdue'}<br><small>Email to manager: ${rs}</small></div>`;
     }).join('') : '<p class="note">No upcoming check-outs.</p>';
     const closed = S.records.filter(r => r.status === 'closed').sort((a, b) => (b.outApprovedAt || 0) - (a.outApprovedAt || 0));
@@ -595,7 +669,7 @@
       <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add villa</a></div></div>
       <div class="grid2">
         <div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
-        <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'An email goes' : 'In the live system an email goes'} to the manager 7 days before each check-out.</p></div>
+        <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'The server emails the manager at 08:00 WITA, 7 days before each check-out. Check the inbox to confirm delivery.' : 'In the live system an email goes to the manager 7 days before each check-out.'}</p></div>
       </div>
       <div class="card"><h3>Completed</h3>${hist}</div>
       ${REAL ? '' : `<div class="row" style="justify-content:space-between">
@@ -612,7 +686,7 @@
       <p class="sub">Staff start each inventory on their phone at the villa. Rooms are added by staff during the first inventory.</p>
       <div class="card">
         <div class="fld"><label for="newVilla">Villa name</label><input id="newVilla" placeholder="e.g. Villa Matahari"></div>
-        <p class="err" id="nvErr" hidden></p>
+        <p class="err" role="alert" id="nvErr" hidden></p>
         <button class="btn" data-act="addVilla">Add villa</button>
       </div>
     </div>`;
@@ -621,7 +695,7 @@
   /* ---------- simulated AI (per room) ---------- */
   function simInRoom(r, roomId) {
     r.inItems = r.inItems || {};
-    if (!CAT[roomId]) { r.inItems[roomId] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: rename or remove', src: 'ai', flag: '' }]; return; }
+    if (!CAT[roomId]) { r.inItems[roomId] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: ubah nama atau hapus barang ini', src: 'ai', flag: '' }]; return; }
     r.inItems[roomId] = CAT[roomId].filter(([n]) => !HIDDEN.has(n)).map(([name, qty]) => ({
       id: uid(), name, qty, cond: name === 'Wine glasses' ? 'Damaged' : 'Good', note: name === 'Wine glasses' ? '1 cracked' : '',
       src: 'ai', flag: SMALL.has(name) ? 'small' : ''
@@ -647,12 +721,21 @@
   }
   // Check-out result = the condition chosen at check-out (Good / Worn / Damaged). No "missing" status.
   function result(it) {
-    if (it.unchecked && !it.touched) return { k: 'gy', t: 'Not photographed' };
-    if (RANK[it.cond] > RANK[it.inCond]) return it.cond === 'Damaged' ? { k: 'rd', t: 'Damaged' } : { k: 'wr', t: 'Worn' };
+    if (it.unchecked && !it.touched && !it.movedTo) return { k: 'gy', t: 'Not photographed' };
+    const mv = it.movedTo ? ` · moved to ${roomName(it.movedTo, 'en')}` : '';
+    if (RANK[it.cond] > RANK[it.inCond]) return it.cond === 'Damaged' ? { k: 'rd', t: 'Damaged' + mv } : { k: 'wr', t: 'Worn' + mv };
+    if (it.movedTo) return { k: 'mv', t: `Moved to ${roomName(it.movedTo, 'en')}` };
     return { k: 'ok', t: it.cond === 'Good' ? 'Good' : it.cond + ' (as at check-in)' };
   }
-  const isChange = res => res.k === 'wr' || res.k === 'rd';
-  const fmtIDR = n => (n || n === 0) && n !== '' ? 'Rp ' + Number(n).toLocaleString('id-ID') : '';
+  const isChange = res => res.k === 'wr' || res.k === 'rd' || res.k === 'mv';
+  const fmtIDR = n => hasCost(n) ? 'Rp ' + Number(n).toLocaleString('id-ID') : '';
+  const costTotal = ch => { const w = ch.filter(x => hasCost(x.it.cost)); return w.length ? w.reduce((a, x) => a + Number(x.it.cost), 0) : null; };
+  function dropZeroQty(r) {
+    let n = 0;
+    Object.keys(r.inItems || {}).forEach(k => { const before = r.inItems[k].length; r.inItems[k] = r.inItems[k].filter(i => Number(i.qty) > 0); n += before - r.inItems[k].length; });
+    if (n) save();
+    return n;
+  }
   function changes(r) {
     const list = [];
     Object.keys(r.outItems || {}).forEach(room => r.outItems[room].forEach(it => {
@@ -682,7 +765,7 @@
     const roomIds = roomsFor(r.villaId).map(x => x.id).filter(k => items[k] || (r.inPhotos[k] || []).length);
     const nItems = Object.values(items).reduce((a, l) => a + l.length, 0);
     const nPh = count(r.inPhotos);
-    const noPhotoRooms = roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length && !items[x.id]).map(x => x.en);
+    const noPhotoRooms = r.seeded ? [] : roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length).map(x => x.en);
     const blocks = roomIds.map(k => {
       const list = items[k] || [];
       const rowsHtml = list.map(it => edit
@@ -695,12 +778,12 @@
       return `<div class="rblock">
         <div class="ph">${photoCol(r.inPhotos[k], 'Check-in', 6)}</div>
         <div style="min-width:0;display:flex;flex-direction:column">
-          <h3>${esc(roomName(k, 'en'))} ${chip('', `${list.length} items`)}</h3>
+          <h3>${esc(roomName(k, 'en'))} ${chip('', plural(list.length, 'item'))}</h3>
           <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th>${edit ? '<th>Source</th>' : ''}</tr>${rowsHtml || `<tr><td colspan="6" class="note">No items.</td></tr>`}</table></div>
         </div>
       </div>`;
     }).join('');
-    const rem = remindersFor(r).map(x => `email on ${fmt(x.d)} (7 days before${x.sent ? ', sent' : ''})`).join(' · ');
+    const rem = remindersFor(r).map(x => `email on ${fmt(x.d)} (7 days before${x.sent ? (REAL ? ', date passed' : ', simulated') : ''})`).join(' · ');
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
@@ -718,11 +801,12 @@
       </div></div>
       ${edit ? `<p class="note">Type the agreement code exactly as it is on the signed agreement.</p>` : ''}
       ${edit ? `<div class="banner ai"><b>${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'}, listed by AI from ${nPh} photo${nPh === 1 ? '' : 's'} and checked by staff.</b> Correct anything that is wrong, then approve. Items marked <span class="warnico">⚠</span> are small items.</div>` : ''}
-      ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}.</div>` : ''}
+      ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}. Every room needs a photo; ask staff to add them before approving.</div>` : ''}
+      ${edit ? '<p class="note">Items with quantity 0 are removed when you approve.</p>' : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
       ${blocks}
       <div class="actions">
-        <div>${edit ? '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" id="apErr" hidden></p></div>
+        <div>${edit ? '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" role="alert" id="apErr" hidden></p></div>
         <div class="row">
           ${edit ? `<button class="btn" data-act="approveIn" data-r="${r.id}">✓ Approve check-in</button>` : ''}
           <button class="btn ${edit ? 'ghost' : ''}" data-act="pdf" data-r="${r.id}" data-ph="in" ${edit ? 'disabled title="Available after approval"' : ''}>📄 Generate PDF</button>
@@ -741,9 +825,9 @@
     const nPh = count(r.outPhotos);
     const condCell = (k, it) => edit ? `<select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Check-out result">${CONDS.map(c => `<option${c === it.cond ? ' selected' : ''}>${c}</option>`).join('')}</select>` : it.cond;
     const noteCell = (k, it) => edit ? `<input data-ok="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note">` : `<span class="note">${esc(it.note)}</span>`;
-    const costCell = (k, it) => costEdit ? `<input class="cost" inputmode="numeric" data-ok="cost" data-room="${k}" data-iid="${it.id}" value="${it.cost ? Number(it.cost).toLocaleString('id-ID') : ''}" placeholder="Optional" aria-label="Cost in rupiah">` : fmtIDR(it.cost);
-    const total = ch.reduce((a, x) => a + (Number(x.it.cost) || 0), 0);
-    const chRows = ch.length ? ch.map(({ room, it, res }) => `<tr class="chg"><td><b>${esc(it.name)}</b></td><td>${esc(roomName(room, 'en'))}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(room, it)}</td><td>${noteCell(room, it)}</td><td>${costCell(room, it)}</td></tr>`).join('')
+    const costCell = (k, it) => costEdit ? `<input class="cost" inputmode="numeric" data-ok="cost" data-room="${k}" data-iid="${it.id}" value="${hasCost(it.cost) ? Number(it.cost).toLocaleString('id-ID') : ''}" placeholder="Optional" aria-label="Cost in rupiah">` : fmtIDR(it.cost);
+    const total = costTotal(ch);
+    const chRows = ch.length ? ch.map(({ room, it, res }) => `<tr class="chg"><td><b>${esc(it.name)}</b></td><td>${esc(roomName(room, 'en'))}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(room, it)}${it.movedTo ? `<br><span class="note">Moved to ${esc(roomName(it.movedTo, 'en'))}</span>` : ''}</td><td>${noteCell(room, it)}</td><td>${costCell(room, it)}</td></tr>`).join('')
       : `<tr><td colspan="6" class="note">No changes. Everything is in the same condition as at check-in.</td></tr>`;
     const blocks = Object.keys(r.outItems || {}).map(k => {
       const list = r.outItems[k];
@@ -754,10 +838,10 @@
           <span class="note">Check-out</span><div class="ph">${photoCol(r.outPhotos[k], 'Check-out', 2)}</div>
         </div>
         <div style="min-width:0">
-          <h3>${esc(roomName(k, 'en'))} ${chip('', `${list.length} items`)}</h3>
+          <h3>${esc(roomName(k, 'en'))} ${chip('', plural(list.length, 'item'))}</h3>
           <details class="all"><summary>Show all ${list.length} items</summary>
           <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Check-in</th><th>Result</th></tr>
-          ${list.map(it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td>${esc(it.name)}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(k, it)}</td></tr>`; }).join('')}
+          ${list.map(it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td>${esc(it.name)}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(k, it)}${it.movedTo ? ` <span class="note">→ ${esc(roomName(it.movedTo, 'en'))}</span>` : ''}</td></tr>`; }).join('')}
           </table></div></details>
           <p class="note">${nCh ? `${nCh} change${nCh === 1 ? '' : 's'} in this room` : 'No changes in this room'}</p>
         </div>
@@ -771,7 +855,7 @@
       ${unchecked.length ? `<div class="banner am">No check-out photos for: ${esc(unchecked.join(', '))}. Those items are marked "Not photographed".</div>` : ''}
       <div class="card"><h3>Changes since check-in</h3>
         <div class="tbl"><table class="vt itbl"><tr><th>Item</th><th>Room</th><th>Check-in</th><th>Result</th><th>Note</th><th>Cost (IDR)</th></tr>${chRows}</table></div>
-        ${ch.length ? `<p class="note"><b>Total cost: <span id="costTotal">${total ? fmtIDR(total) : '—'}</span></b>. Cost is optional: type it here, or leave it blank and write it on the printed PDF.${!edit ? ' You can still change it after approval; generate the PDF again afterwards.' : ''}</p>` : ''}
+        ${ch.length ? `<p class="note"><b>Total cost: <span id="costTotal">${total === null ? '—' : fmtIDR(total)}</span></b>. Cost is optional: type it here, or leave it blank and write it on the printed PDF.${!edit ? ' You can still change it after approval; generate the PDF again afterwards.' : ''}</p>` : ''}
       </div>
       ${blocks}
       <div class="actions">
@@ -822,7 +906,10 @@
       if (r.idNo) meta.push(['ID no.', r.idNo]);
       meta.forEach((m, i) => {
         const x = i % 2 === 0 ? M : W / 2; const yy = y + Math.floor(i / 2) * 6;
-        doc.setFont('helvetica', 'bold'); doc.text(`${m[0]}:`, x, yy); const lw = doc.getTextWidth(`${m[0]}:`); doc.setFont('helvetica', 'normal'); doc.text(String(m[1]), x + Math.max(24, lw + 3), yy);
+        doc.setFont('helvetica', 'bold'); doc.text(`${m[0]}:`, x, yy); const lw = doc.getTextWidth(`${m[0]}:`); doc.setFont('helvetica', 'normal');
+        const vx = x + Math.max(24, lw + 3), maxW = (i % 2 === 0 ? W / 2 - 4 : W - M) - vx;
+        let val = String(m[1]); if (doc.getTextWidth(val) > maxW) { while (val.length > 1 && doc.getTextWidth(val + '…') > maxW) val = val.slice(0, -1); val += '…'; }
+        doc.text(val, vx, yy);
       });
       y += Math.ceil(meta.length / 2) * 6 + 4;
       const photoRow = async (ids0, label, maxN) => {
@@ -866,10 +953,11 @@
         doc.setDrawColor(217, 224, 221); doc.line(M + half + mid / 2, y, M + half + mid / 2, y + bh);
         y += bh + 5;
       };
-      const roomTitle = (name, extra) => {
-        need(14);
+      // Keep the room heading on the same page as its first photos and table rows.
+      const roomTitle = (name, extra, keep) => {
+        need(12 + (keep === undefined ? 62 : keep));
         doc.setFillColor(250, 236, 236); doc.rect(M, y, W - 2 * M, 8, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(name, M + 3, y + 5.5);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(doc.splitTextToSize(String(name), W - 2 * M - 40)[0], M + 3, y + 5.5);
         if (extra) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(extra, W - M - 3, y + 5.5, { align: 'right' }); doc.setTextColor(...DARK); }
         y += 12;
       };
@@ -885,25 +973,25 @@
       if (phase === 'in') {
         const items = r.inItems || {};
         for (const k of Object.keys(items)) {
-          roomTitle(roomName(k, 'en'), `${items[k].length} items`);
+          roomTitle(roomName(k, 'en'), plural(items[k].length, 'item'));
           await photoRow(r.inPhotos[k] || [], 'Photos', 4);
           table(['Item', 'Qty', 'Condition', 'Note'], items[k].map(i => [i.name, String(i.qty), i.cond, i.note || '']), { 1: { cellWidth: 14, halign: 'center' }, 2: { cellWidth: 26 } });
         }
       } else {
         const ch = changes(r);
-        roomTitle('Changes since check-in', `${ch.length} found`);
+        roomTitle('Changes since check-in', `${ch.length} found`, 24);
         if (ch.length) {
-          const total = ch.reduce((a, x) => a + (Number(x.it.cost) || 0), 0);
+          const total = costTotal(ch);
           table(['Item', 'Room', 'Check-in', 'Result', 'Note', 'Cost (IDR)'],
-            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, res.t, it.note || '', it.cost ? Number(it.cost).toLocaleString('id-ID') : '']),
+            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, res.t, it.note || '', hasCost(it.cost) ? Number(it.cost).toLocaleString('id-ID') : '']),
             { 5: { cellWidth: 30, halign: 'right', minCellHeight: 8 } },
-            ['', '', '', '', 'Total', total ? total.toLocaleString('id-ID') : '']);
+            ['', '', '', '', 'Total', total === null ? '' : total.toLocaleString('id-ID')]);
           doc.setFontSize(8); doc.setTextColor(...MUTED);
           doc.text('Cost of repair or compensation in rupiah. If blank, to be filled in by the owner or agent.', M, y - 4); doc.setTextColor(...DARK); y += 2;
         }
         else { doc.setFontSize(10); doc.text('No changes. Everything is in the same condition as at check-in.', M, y); y += 10; }
         for (const k of Object.keys(r.outItems || {})) {
-          roomTitle(roomName(k, 'en'), `${r.outItems[k].length} items`);
+          roomTitle(roomName(k, 'en'), plural(r.outItems[k].length, 'item'));
           await photoPair(r.inPhotos[k] || [], r.outPhotos[k] || []);
           table(['Item', 'Check-in', 'Result'], r.outItems[k].map(it => [it.name, `${it.inQty} ${it.inCond}`, result(it).t]), { 1: { cellWidth: 34 }, 2: { cellWidth: 44 } });
         }
@@ -920,7 +1008,7 @@
       doc.setFontSize(9); doc.setTextColor(...MUTED);
       doc.text("Owner / Villa / Listing", M, y + 5); doc.text('Tenant', W - M - 75, y + 5);
       doc.text("Owner's Representative", M, y + 10);
-      doc.text('Name:', M, y + 16); doc.text(`Name: ${r.tenant || ''}`, W - M - 75, y + 16);
+      doc.text('Name:', M, y + 16); doc.text(doc.splitTextToSize(`Name: ${r.tenant || ''}`, 75)[0], W - M - 75, y + 16);
       doc.text('Date:', M, y + 22); doc.text('Date:', W - M - 75, y + 22);
       doc.setTextColor(...DARK); y += 27;
       // headers on pages added by autoTable + footers
@@ -931,14 +1019,15 @@
           doc.setFillColor(255, 255, 255); doc.rect(0, 0, W, 26, 'F'); drawHeader();
         }
         doc.setFontSize(8); doc.setTextColor(...MUTED);
-        doc.text(`${v.name} · ${title} · GW Realty`, M, 291);
+        doc.text(doc.splitTextToSize(`${v.name} · ${title} · GW Realty`, 140)[0], M, 291);
         doc.text(`Page ${i} of ${pages}`, W - M, 291, { align: 'right' });
       }
-      const fname = `${r.agreement ? r.agreement + '-' : ''}${v.name.replace(/[^A-Za-z0-9]+/g, '-')}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
+      const safe = x => String(x).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+      const fname = `${r.agreement ? safe(r.agreement) + '-' : ''}${safe(v.name)}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
       doc.save(fname);
       toast('PDF generated: ' + fname);
       if (LIVE) api('gw-save-pdf', { method: 'POST', body: { fileName: fname, data: b64(doc.output('datauristring')) } })
-        .then(() => toast('PDF saved to Google Drive.')).catch(() => toast('PDF downloaded, but saving to Google Drive failed.'));
+        .then(() => toast(REAL ? 'PDF saved to Google Drive.' : 'PDF saved (demo).')).catch(() => toast('PDF downloaded, but saving to Google Drive failed.'));
     } catch (e) {
       console.error(e);
       toast('The PDF could not be generated. Please try again.');
@@ -950,14 +1039,30 @@
     if (e.target.id !== 'loginForm') return;
     e.preventDefault();
     const em = document.getElementById('lgEmail').value.trim(), pw = document.getElementById('lgPw').value, err = document.getElementById('lgErr');
-    if (LIVE) await pullAll(true);
-    const u = S.users.find(x => x.email.toLowerCase() === em.toLowerCase());
-    if (!u || !u.pw || u.pw !== await pwHash(em, pw)) { err.hidden = false; err.textContent = 'Email or password is not correct.'; return; }
-    S.user = u.id; S.role = u.role; save(); go(u.role === 'mgr' ? '#/mgr' : '#/staff');
+    const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
+    try {
+      if (LIVE) {
+        // The server checks the password and returns a signed token; nothing about passwords is kept on the device.
+        let res;
+        try { res = await api('gw-login', { method: 'POST', body: { email: em, password: pw } }); }
+        catch (e2) { err.hidden = false; err.textContent = e2.status === 401 ? 'Email or password is not correct.' : 'Server not reachable. Check the internet connection. / Server tidak dapat dihubungi.'; return; }
+        const u = res.user;
+        S.token = res.token; S.user = u.id; S.role = u.role;
+        S.users = (S.users || []).filter(x => x.id !== u.id).concat([u]);
+        save();
+        await pullAll(true);
+        go(u.role === 'mgr' ? '#/mgr' : '#/staff');
+        return;
+      }
+      const u = S.users.find(x => x.email.toLowerCase() === em.toLowerCase());
+      if (!u || !u.pw || u.pw !== await pwHash(em, pw)) { err.hidden = false; err.textContent = 'Email or password is not correct.'; return; }
+      S.user = u.id; S.role = u.role; save(); go(u.role === 'mgr' ? '#/mgr' : '#/staff');
+    } finally { btn.disabled = false; }
   });
   app.addEventListener('change', e => {
     const t = e.target;
     if (t.matches('input[type=file][data-room]')) { addPhotos(t); return; }
+    if (t.dataset.act === 'showPw') { ['nuPw', 'cpPw'].forEach(id => { const el = document.getElementById(id); if (el) el.type = t.checked ? 'text' : 'password'; }); return; }
     if (t.dataset.ok) { outEdit(t, true); return; }
     if (t.dataset.k) { inEdit(t); return; }
     if (t.dataset.f) {
@@ -988,14 +1093,17 @@
     if (!open && !(k === 'cost' && r.status === 'closed')) return;
     const it = findItem(r.outItems[t.dataset.room], t.dataset.iid); if (!it) return;
     if (k === 'cost') { const d = String(t.value).replace(/\D/g, ''); it.cost = d ? parseInt(d, 10) : ''; }
+    else if (k === 'movedTo') { it.movedTo = t.value || ''; if (!it.movedTo) delete it.movedTo; else { it.unchecked = false; it.touched = true; if (it.note === 'Not visible in photo' || it.note === 'No check-out photo') it.note = ''; } }
     else it[k] = k === 'qty' ? Math.max(0, parseInt(t.value, 10) || 0) : t.value;
     if (k === 'cond') { it.touched = true; if (it.note === 'No check-out photo') it.note = ''; }
     save();
     if (k === 'cost') {
-      if (r.status === 'closed') pushRecord(r).catch(() => {});
-      t.value = it.cost ? Number(it.cost).toLocaleString('id-ID') : '';
-      const tot = changes(r).reduce((a, x) => a + (Number(x.it.cost) || 0), 0);
-      const el = document.getElementById('costTotal'); if (el) el.textContent = tot ? fmtIDR(tot) : '—';
+      t.value = hasCost(it.cost) ? Number(it.cost).toLocaleString('id-ID') : '';
+      const tot = costTotal(changes(r));
+      const el = document.getElementById('costTotal'); if (el) el.textContent = tot === null ? '—' : fmtIDR(tot);
+      if (r.status === 'closed' && LIVE) {
+        pushRecord(r).then(() => toast('Cost saved.')).catch(e => onSaveError(r, e, 'Cost NOT saved to the server. Check the connection and change it again.'));
+      }
       return;
     }
     if (rerender) render(true);
@@ -1010,16 +1118,16 @@
     const act = b.dataset.act;
     if (act === 'setPw') {
       const u = S.users.find(x => x.id === document.getElementById('cpUser').value), pw = document.getElementById('cpPw').value, err = document.getElementById('cpErr');
-      if (!u || pw.length < 6) { err.hidden = false; err.textContent = 'The password needs at least 6 characters.'; return; }
-      pwHash(u.email, pw).then(h => { u.pw = h; save(); pushSettings(); toast(`Password changed for ${u.name}.`); render(true); });
+      if (!u || pw.length < 8) { err.hidden = false; err.textContent = 'The password needs at least 8 characters.'; return; }
+      pwHash(u.email, pw).then(async h => { if (LIVE) u.pwNew = h; else u.pw = h; save(); await pushSettings(); toast(`Password changed for ${u.name}.`); render(true); });
     }
     else if (act === 'addUser') {
       const n = document.getElementById('nuName').value.trim(), em = document.getElementById('nuEmail').value.trim(), err = document.getElementById('nuErr');
       if (!n || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.hidden = false; err.textContent = 'Add a name and a valid email.'; return; }
       if (S.users.some(u => u.email.toLowerCase() === em.toLowerCase())) { err.hidden = false; err.textContent = 'An account with this email already exists.'; return; }
       const pw = document.getElementById('nuPw').value;
-      if (pw.length < 6) { err.hidden = false; err.textContent = 'The password needs at least 6 characters.'; return; }
-      pwHash(em, pw).then(h => { S.users.push({ id: uid(), name: n, email: em, role: 'staff', pw: h }); save(); pushSettings(); toast(`Account created for ${n}. Tell them their password.`); render(); });
+      if (pw.length < 8) { err.hidden = false; err.textContent = 'The password needs at least 8 characters.'; return; }
+      pwHash(em, pw).then(async h => { S.users.push(Object.assign({ id: uid(), name: n, email: em, role: 'staff' }, LIVE ? { pwNew: h } : { pw: h })); save(); await pushSettings(); toast(`Account created for ${n}. Tell them their password.`); render(); });
     }
     else if (act === 'delUser') {
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to remove'; return; }
@@ -1036,13 +1144,27 @@
     }
     else if (act === 'startIn') {
       const r = { id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() };
-      S.records.push(r); save(); pushRecord(r).catch(() => {}); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
+      S.records.push(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Belum tersimpan di server. Akan dicoba lagi saat dikirim.')); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
     }
-    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(() => {}); go(`#/staff/capture/${r.id}`); }
+    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Belum tersimpan di server. Akan dicoba lagi saat dikirim.')); go(`#/staff/capture/${r.id}`); }
+    else if (act === 'retryAi') {
+      const r = rec(location.hash.split('/')[3]); if (!r) return; const phase = phaseOf(r);
+      goodPhotos((r[phase + 'Photos'] || {})[b.dataset.room]).then(good => { if (good.length) runAi(r, phase, b.dataset.room, good); else toast('Tambahkan foto yang terang dulu.'); });
+    }
+    else if (act === 'hideRoom') {
+      const v = villa(b.dataset.v); if (!v) return;
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tekan lagi untuk menghapus ruangan ini dari villa'; return; }
+      const room = b.dataset.room;
+      if (ROOMS.some(x => x.id === room)) v.hideRooms = (v.hideRooms || []).concat([room]);
+      else v.rooms = (v.rooms || []).filter(x => x.id !== room);
+      const r = rec(location.hash.split('/')[3]); if (r && r.inItems) delete r.inItems[room];
+      save(); pushSettings(); toast('Ruangan dihapus dari villa ini.'); render(true);
+    }
     else if (act === 'rmPhoto') {
       const r = rec(location.hash.split('/')[3]); const phase = r.status === 'in_draft' ? 'in' : 'out';
       const l = r[phase + 'Photos'][b.dataset.room] || []; const i = l.indexOf(b.dataset.pid);
-      if (i >= 0) { l.splice(i, 1); IDB.del(b.dataset.pid); PC.delete(b.dataset.pid); }
+      // The copy already uploaded stays in Google Drive as evidence (only the folder owner deletes it); the record just stops using it.
+      if (i >= 0) { l.splice(i, 1); IDB.del(b.dataset.pid); PC.delete(b.dataset.pid); if (r.photoFiles) delete r.photoFiles[b.dataset.pid]; }
       save(); render(true);
     }
     else if (act === 'send') sendPhotos(rec(b.dataset.r));
@@ -1063,18 +1185,23 @@
       if (!r.checkIn) probs.push('Add the check-in date.');
       if (!r.checkOut) probs.push('Add the check-out date.');
       if (r.checkIn && r.checkOut && r.checkOut <= r.checkIn) probs.push('The check-out date must be after the check-in date.');
+      if (r.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email)) probs.push('Enter a valid tenant email address, or leave it blank.');
+      const noPh = r.seeded ? [] : roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length).map(x => x.en);
+      if (noPh.length) probs.push(`Every room needs a photo. Missing: ${noPh.join(', ')}.`);
       const blank = Object.values(r.inItems || {}).some(l => l.some(i => !i.name.trim()));
       if (blank) probs.push('Some items have no name. Fill them in or remove them.');
       if (!Object.values(r.inItems || {}).some(l => l.length)) probs.push('The list is empty.');
       if (probs.length) { err.hidden = false; err.textContent = probs.join(' '); return; }
+      const z = dropZeroQty(r);
+      if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'The list is empty.'; return; }
       r.status = 'occupied'; r.inApprovedAt = Date.now(); save();
-      toast('Check-in approved. Check-out reminder email is scheduled.'); render();
-      pushRecord(r).catch(() => toast('Approved on this device, but saving to the server failed. Open the record again to retry.'));
+      toast(`Check-in approved.${z ? ` ${plural(z, 'item')} with quantity 0 removed.` : ''}`); render();
+      pushRecord(r).catch(e2 => { if (e2.status !== 409) { r.status = 'checkin_pending'; delete r.inApprovedAt; delete r._dirty; save(); render(); } onSaveError(r, e2, 'Not approved: saving to the server failed. Check the connection and approve again.'); });
     }
     else if (act === 'approveOut') {
       const r = rec(b.dataset.r); r.status = 'closed'; r.outApprovedAt = Date.now(); save();
       toast('Check-out approved. The villa is empty again.'); render();
-      pushRecord(r).catch(() => toast('Approved on this device, but saving to the server failed.'));
+      pushRecord(r).catch(e2 => { if (e2.status !== 409) { r.status = 'checkout_pending'; delete r.outApprovedAt; delete r._dirty; save(); render(); } onSaveError(r, e2, 'Not approved: saving to the server failed. Check the connection and approve again.'); });
     }
     else if (act === 'pdf') { if (!b.disabled) makePdf(rec(b.dataset.r), b.dataset.ph); }
     else if (act === 'addVilla') {
@@ -1087,7 +1214,7 @@
       (async () => {
         if (LIVE) { try { await api('gw-reset', { method: 'POST', body: {} }); } catch (e3) { toast('Could not reset the shared data. Check the connection.'); return; } }
         try { localStorage.removeItem(KEY); } catch (e2) { /* ignore */ }
-        IDB.clear(); PC.clear(); S = seed(); S.role = 'mgr'; S.user = 'u-mgr'; save();
+        const tok = S.token; IDB.clear(); PC.clear(); S = seed(); S.role = 'mgr'; S.user = 'u-mgr'; S.token = tok; save();
         if (LIVE) await pullAll(true);
         toast('Demo reset.'); go('#/mgr'); render(true);
       })();
@@ -1095,6 +1222,11 @@
   });
   barEl.addEventListener('click', e => { if (e.target.closest('[data-act="switch"]')) { S.user = null; S.role = null; save(); go('#/login'); } });
 
+  // Another tab signed in or out: follow it, so two tabs never act as different people.
+  window.addEventListener('storage', e => {
+    if (e.key !== KEY || !e.newValue) return;
+    try { const n = JSON.parse(e.newValue); if (n && (n.user !== S.user || n.token !== S.token)) { S = n; render(); } } catch (e2) { /* ignore */ }
+  });
   load();
   render();
   if (LIVE) pullAll(true).then(ch => { if (ch) render(true); });

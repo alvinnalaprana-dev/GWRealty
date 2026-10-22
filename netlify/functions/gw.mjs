@@ -1,9 +1,15 @@
-// Temporary shared demo backend (Netlify Function + Netlify Blobs).
-// Same endpoints as the n8n workflows, so the page works across devices before n8n is connected.
-// AI is simulated. Replace config.js base with the n8n URL to go live.
+// Shared demo backend (Netlify Function + Netlify Blobs).
+// Same endpoints and the same server rules as the n8n workflows (login, token check, staff limits,
+// overwrite protection), so the demo behaves like the real system. AI is simulated.
 import { getStore } from '@netlify/blobs';
+import core from '../../n8n/src/gwcore.cjs';
 
-const KEY = 'gw-demo-2026';
+const KEY = 'gw-demo-2026';                 // public demo key: the demo holds sample data only
+const SECRET = 'gw-demo-token-secret';      // demo only; the real secret lives in n8n
+const BOOT = [
+  { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr', pw: core.gwPwHash('manno.realtor@gmail.com', 'gwrealty2026') },
+  { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff', pw: core.gwPwHash('wayan@gwrealtyglobal.com', 'wayan2026') }
+];
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
 export default async (req) => {
@@ -13,23 +19,37 @@ export default async (req) => {
   const store = getStore({ name: 'gw-demo', consistency: 'strong' });
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
   const readAll = async () => (await store.get('records', { type: 'json' })) || {};
+  const all = await readAll();
+  const recs = Object.values(all);
 
-  if (ep === 'gw-records') return json({ ok: true, records: Object.values(await readAll()) });
+  if (ep === 'gw-login') { const r = core.gwLogin(body, recs, BOOT, SECRET); return json(r, r.status); }
+  const who = core.gwWho(req.headers.get('x-gw-token'), recs, BOOT, SECRET);
+  if (!who) return json({ ok: false, error: 'Please sign in again.' }, 401);
+
+  if (ep === 'gw-reset') {
+    if (who.role !== 'mgr') return json({ ok: false, error: 'Only the manager can reset the demo.' }, 403);
+    const { blobs } = await store.list();
+    for (const b of blobs) await store.delete(b.key);
+    return json({ ok: true });
+  }
+
+  if (ep === 'gw-records') return json({ ok: true, records: core.gwList(recs, who) });
 
   if (ep === 'gw-save-record') {
-    const r = body.record || {};
-    if (!r.id) return json({ error: 'record.id required' }, 400);
-    const all = await readAll();
+    const id = (body.record || {}).id;
+    const settings = core.gwSettings(recs, BOOT);
+    const p = core.gwPrepareSave(body.record, all[id], settings, who);
+    if (!p.ok) return json(p, p.status);
+    const r = p.record;
     r.photoFiles = Object.assign({}, (all[r.id] || {}).photoFiles, r.photoFiles);
-    for (const p of body.photos || []) {
+    for (const ph of body.photos || []) {
       const fid = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      await store.set('photo:' + fid, String(p.data || ''));
-      r.photoFiles[p.id] = fid;
+      await store.set('photo:' + fid, String(ph.data || ''));
+      r.photoFiles[ph.id] = fid;
     }
-    r.updatedAt = new Date().toISOString();
     all[r.id] = r;
     await store.setJSON('records', all);
-    return json({ ok: true, recordId: r.id, photoFiles: r.photoFiles });
+    return json({ ok: true, recordId: r.id, photoFiles: r.photoFiles, updatedAt: r.updatedAt });
   }
 
   if (ep === 'gw-photo') {
@@ -56,12 +76,6 @@ export default async (req) => {
   }
 
   if (ep === 'gw-save-pdf') return json({ ok: true, demo: true });
-
-  if (ep === 'gw-reset') {
-    const { blobs } = await store.list();
-    for (const b of blobs) await store.delete(b.key);
-    return json({ ok: true });
-  }
 
   return json({ error: 'unknown endpoint' }, 404);
 };
