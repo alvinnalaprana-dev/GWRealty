@@ -334,6 +334,7 @@
       ${demo ? `<div class="card"><h3>Demo accounts</h3>
         <p class="note"><b>Manager</b> (laptop): manno.realtor@gmail.com · password <b>gwrealty2026</b><br><b>Staff</b> (phone): wayan@gwrealtyglobal.com · password <b>wayan2026</b></p>
         <p class="note">AI results are simulated in the demo.${LIVE ? ' Data is shared between devices.' : ' Data stays in this browser.'}</p></div>` : ''}
+      <p class="note"><a href="privacy.html">Privacy policy</a></p>
     </div>`;
   }
 
