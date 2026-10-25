@@ -29,7 +29,7 @@
   const fmt = (s, lang) => { const d = parse(s); if (!d) return '—'; const m = (lang === 'id' ? MON_ID : MON_EN)[d.getMonth()]; return `${d.getDate()} ${m} ${d.getFullYear()}`; };
   const daysUntil = s => Math.round((parse(s) - today()) / 864e5);
   const allRooms = () => ROOMS.concat(...((S && S.villas) || []).map(v => v.rooms || []));
-  const roomName = (id, lang) => { const r = allRooms().find(x => x.id === id); return r ? (lang === 'id' ? r.id_ : r.en) : id; };
+  const roomName = (id) => { const r = allRooms().find(x => x.id === id); return r ? r.en : id; };   // all screens are in English (22 Oct 2026)
   const roomsFor = vid => { const v = (S.villas || []).find(x => x.id === vid) || {}; const hide = v.hideRooms || []; return ROOMS.filter(x => hide.indexOf(x.id) < 0).concat(v.rooms || []); };
   const roomObj = id => allRooms().find(x => x.id === id);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -75,7 +75,7 @@
     try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
     catch (e) { if (!saveWarned) { saveWarned = true; toast(T('Memori perangkat penuh: data belum tersimpan di perangkat. Kirim sekarang atau kosongkan memori.', 'This device could not store the data (storage full or blocked). Save to the server now.')); } return false; }
   }
-  const L = () => (S.role === 'mgr' ? 'en' : 'id');
+  const L = () => 'en';
   const T = (id, en) => (L() === 'id' ? id : en);
   const villa = id => S.villas.find(v => v.id === id);
   const pwHash = async (email, pw) => { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).toLowerCase().trim() + ':' + pw)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); };
@@ -94,7 +94,7 @@
     if (!res.ok) {
       let msg = ''; try { msg = (await res.json()).error || ''; } catch (e) { /* not json */ }
       const err = new Error(msg || 'HTTP ' + res.status); err.status = res.status;
-      if (res.status === 401 && path !== 'gw-login' && S.user) { S.user = null; S.role = null; S.token = null; save(); toast('Please sign in again. / Silakan masuk lagi.'); go('#/login'); }
+      if (res.status === 401 && path !== 'gw-login' && S.user) { S.user = null; S.role = null; S.token = null; save(); toast('Please sign in again.'); go('#/login'); }
       throw err;
     }
     return opts.blob ? res.blob() : res.json();
@@ -277,16 +277,17 @@
     document.addEventListener('keydown', function k(e) { if (e.key === 'Escape') { o.remove(); document.removeEventListener('keydown', k); } });
     document.body.appendChild(o);
   }
+  const EYE = id => `<button type="button" class="eye" data-act="eye" data-for="${id}" aria-label="Show password" title="Show password"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>`;
   const chip = (cls, txt) => `<span class="chip ${cls}">${esc(txt)}</span>`;
   const phImg = (pid, alt) => `<img data-pid="${esc(pid)}" alt="${esc(alt)}" class="zoom">`;
   const phEmpty = label => `<div class="ph-empty"><span>${esc(label)}</span></div>`;
 
   function renderBar() {
     const u = curUser();
-    const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staf · ${u ? u.name : ''}` : '';
+    const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staff · ${u ? u.name : ''}` : '';
     barEl.innerHTML = `<div class="bar-in">
-      <a class="brand" href="#/"><img src="logo-white.png" alt="GW Realty"><span>${S.role === 'mgr' ? 'Inventory' : 'Inventaris'}</span></a>
-      <div class="bar-r"><span class="demo">${esc(API.label || (LIVE ? 'TEST' : 'DEMO'))}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">${S.role === 'mgr' ? 'Sign out' : 'Keluar'}</button>` : ''}</div>
+      <a class="brand" href="#/"><img src="logo-white.png" alt="GW Realty"><span>Inventory</span></a>
+      <div class="bar-r"><span class="demo">${esc(API.label || (LIVE ? 'TEST' : 'DEMO'))}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">Sign out</button>` : ''}</div>
     </div>`;
   }
 
@@ -302,7 +303,7 @@
     if (p[0] === 'staff') S.role = 'staff';
     if (p[0] === 'mgr') S.role = 'mgr';
     if (p[0] === '' && S.role) { go(S.role === 'mgr' ? '#/mgr' : '#/staff'); return; }
-    document.documentElement.lang = S.role === 'staff' ? 'id' : 'en';
+    document.documentElement.lang = 'en';
     renderBar();
     if (p[0] === 'staff' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'staff') { viewStaffHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'staff') render(true); }); }
@@ -327,7 +328,7 @@
       <p class="sub">Sign in with the email and password your manager gave you.</p>
       <form class="card" id="loginForm" autocomplete="on">
         <div class="fld"><label for="lgEmail">Email</label><input id="lgEmail" type="email" autocomplete="username" required></div>
-        <div class="fld"><label for="lgPw">Password</label><input id="lgPw" type="password" autocomplete="current-password" required></div>
+        <div class="fld"><label for="lgPw">Password</label><div class="pwwrap"><input id="lgPw" type="password" autocomplete="current-password" required>${EYE('lgPw')}</div></div>
         <p class="err" role="alert" id="lgErr" hidden></p>
         <button class="btn block" type="submit">Sign in</button>
       </form>
@@ -352,7 +353,7 @@
         <div class="form">
           <div class="fld"><label for="nuName">Name</label><input id="nuName" placeholder="e.g. Komang"></div>
           <div class="fld"><label for="nuEmail">Email</label><input id="nuEmail" type="email" placeholder="komang@gwrealtyglobal.com"></div>
-          <div class="fld"><label for="nuPw">Password</label><input id="nuPw" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div>
+          <div class="fld"><label for="nuPw">Password</label><div class="pwwrap"><input id="nuPw" type="password" autocomplete="new-password" placeholder="At least 8 characters">${EYE('nuPw')}</div></div>
         </div>
         <p class="err" role="alert" id="nuErr" hidden></p>
         <button class="btn" data-act="addUser">Create account</button>
@@ -361,11 +362,10 @@
         <h3>Change a password</h3>
         <div class="form">
           <div class="fld"><label for="cpUser">Account</label><select id="cpUser">${S.users.map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}</select></div>
-          <div class="fld"><label for="cpPw">New password</label><input id="cpPw" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div>
+          <div class="fld"><label for="cpPw">New password</label><div class="pwwrap"><input id="cpPw" type="password" autocomplete="new-password" placeholder="At least 8 characters">${EYE('cpPw')}</div></div>
         </div>
         <p class="err" role="alert" id="cpErr" hidden></p>
         <button class="btn ghost" data-act="setPw">Save new password</button>
-        <label class="note"><input type="checkbox" data-act="showPw"> Show passwords while typing</label>
         <p class="note">Use this when staff forget their password, or to change the manager's own password.</p>
       </div>
     </div>`;
@@ -376,64 +376,64 @@
     const cards = S.villas.map(v => {
       const r = activeRec(v.id);
       let status, info = '', btn = '';
-      if (!r) { status = chip('', 'Kosong'); info = 'Siap untuk check-in'; btn = `<button class="btn block" data-act="startIn" data-v="${v.id}">Mulai check-in</button>`; }
-      else if (r.status === 'in_draft') { status = chip('am', 'Foto check-in belum dikirim'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Lanjutkan check-in</a>`; }
-      else if (r.status === 'checkin_pending') { status = chip('am', 'Menunggu persetujuan manajer'); info = 'Foto check-in sudah dikirim'; }
+      if (!r) { status = chip('', 'Empty'); info = 'Ready for check-in'; btn = `<button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button>`; }
+      else if (r.status === 'in_draft') { status = chip('am', 'Check-in photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-in</a>`; }
+      else if (r.status === 'checkin_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-in photos sent'; }
       else if (r.status === 'occupied') {
         const d = daysUntil(r.checkOut);
-        status = chip('ok', 'Disewa');
-        info = `Penyewa: ${esc(r.tenant)} · check-out ${fmt(r.checkOut, 'id')}`;
-        if (d <= 7) status += ' ' + chip('am', d < 0 ? 'Lewat tanggal check-out' : d === 0 ? 'Check-out hari ini' : `Check-out ${d} hari lagi`);
-        btn = `<button class="btn block ${d <= 7 ? '' : 'ghost'}" data-act="startOut" data-r="${r.id}">Mulai check-out</button>`;
+        status = chip('ok', 'Occupied');
+        info = `Tenant: ${esc(r.tenant || '—')} · check-out ${fmt(r.checkOut)}`;
+        if (d <= 7) status += ' ' + chip('am', d < 0 ? 'Check-out overdue' : d === 0 ? 'Check-out today' : `Check-out in ${d} day${d === 1 ? '' : 's'}`);
+        btn = `<button class="btn block ${d <= 7 ? '' : 'ghost'}" data-act="startOut" data-r="${r.id}">Start check-out</button>`;
       }
-      else if (r.status === 'out_draft') { status = chip('am', 'Foto check-out belum dikirim'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Lanjutkan check-out</a>`; }
-      else if (r.status === 'checkout_pending') { status = chip('am', 'Menunggu persetujuan manajer'); info = 'Foto check-out sudah dikirim'; }
+      else if (r.status === 'out_draft') { status = chip('am', 'Check-out photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-out</a>`; }
+      else if (r.status === 'checkout_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-out photos sent'; }
       return `<div class="villa"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
     }).join('');
     app.innerHTML = `<div class="page narrow">
-      <div class="head"><div><p class="eyebrow">Halo, ${esc((curUser() || {}).name || '')}</p><h1>Villa</h1></div></div>
-      <p class="sub">Pilih villa untuk check-in atau check-out. Cukup ambil foto, daftar barang dibuat otomatis.</p>
+      <div class="head"><div><p class="eyebrow">Hello, ${esc((curUser() || {}).name || '')}</p><h1>Villas</h1></div></div>
+      <p class="sub">Choose a villa for check-in or check-out. Just take photos; the item list is made automatically.</p>
       <div class="vlist">${cards}</div>
-      ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data tersambung ke manajer.' : 'Demo: data hanya tersimpan di browser ini.'}</p>`}
+      ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data is shared with the manager.' : 'Demo: data stays in this browser.'}</p>`}
     </div>`;
   }
 
   /* ---------- capture (staff): photos per room, AI lists items, staff checks them ---------- */
   let confirmMissing = false;
   const BUSY = new Set();
-  const CONDS_ID = { Good: 'Baik', Worn: 'Aus', Damaged: 'Rusak' };
-  const ROOM_SUGGEST = [['Miscellaneous', 'Lain-lain'], ['Terrace', 'Teras'], ['Bathroom', 'Kamar mandi'], ['Pool area', 'Area kolam'], ['Garden', 'Taman']];
+  const CONDS_ID = { Good: 'Good', Worn: 'Worn', Damaged: 'Damaged' };
+  const ROOM_SUGGEST = [['Miscellaneous', 'Miscellaneous'], ['Terrace', 'Terrace'], ['Bathroom', 'Bathroom'], ['Pool area', 'Pool area'], ['Garden', 'Garden']];
   const phaseOf = r => (r.status === 'in_draft' || r.status === 'checkin_pending' ? 'in' : 'out');
   const capRooms = (r, phase) => phase === 'in' ? roomsFor(r.villaId) : roomsFor(r.villaId).filter(x => (r.inItems || {})[x.id]);
   const goodPhotos = async ids => { const out = []; for (const id of ids || []) { const p = await getPhoto(id); if (p && !p.dark) out.push(id); } return out; };
 
   function staffInTable(r, k) {
     const list = r.inItems[k] || [];
-    const rows = list.map(it => `<tr data-iid="${it.id}"><td><div class="nmw"><input class="nm" data-k="name" data-room="${k}" data-iid="${it.id}" value="${esc(it.name)}" placeholder="Nama barang" aria-label="Nama barang">${it.flag === 'small' ? '<span class="warnico" title="Barang kecil: cek jumlahnya">⚠</span>' : ''}</div></td>
-      <td><input class="q" type="number" min="0" inputmode="numeric" data-k="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Jumlah"></td>
-      <td><select data-k="cond" data-room="${k}" data-iid="${it.id}" aria-label="Kondisi">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
-      <td><input data-k="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Catatan" aria-label="Catatan"></td>
-      <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Ditambah' : 'Diubah'}</span></td>
-      <td><button class="del" data-act="delItem" data-room="${k}" data-iid="${it.id}" aria-label="Hapus barang">✕</button></td></tr>`).join('');
-    return `<div class="ailist"><p class="note"><b>Daftar dari AI: ${list.length} barang.</b> Cek nama, jumlah dan kondisi. Barang ⚠ kecil: hitung ulang.</p>
-      <div style="overflow-x:auto"><table class="itbl"><tr><th>Barang</th><th>Jml</th><th>Kondisi</th><th>Catatan</th><th>Sumber</th><th></th></tr>${rows || '<tr><td colspan="6" class="note">Belum ada barang.</td></tr>'}</table></div>
-      <button class="add" data-act="addItem" data-room="${k}">+ Tambah barang</button></div>`;
+    const rows = list.map(it => `<tr data-iid="${it.id}"><td><div class="nmw"><input class="nm" data-k="name" data-room="${k}" data-iid="${it.id}" value="${esc(it.name)}" placeholder="Item name" aria-label="Item name">${it.flag === 'small' ? '<span class="warnico" title="Small item: check the count">⚠</span>' : ''}</div></td>
+      <td><input class="q" type="number" min="0" inputmode="numeric" data-k="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Quantity"></td>
+      <td><select data-k="cond" data-room="${k}" data-iid="${it.id}" aria-label="Condition">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
+      <td><input data-k="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note"></td>
+      <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Added' : 'Edited'}</span></td>
+      <td><button class="del" data-act="delItem" data-room="${k}" data-iid="${it.id}" aria-label="Remove item">✕</button></td></tr>`).join('');
+    return `<div class="ailist"><p class="note"><b>AI list: ${list.length} item${list.length === 1 ? '' : 's'}.</b> Check names, quantities and condition. ⚠ = small item: count again.</p>
+      <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th><th>Source</th><th></th></tr>${rows || '<tr><td colspan="6" class="note">No items yet.</td></tr>'}</table></div>
+      <button class="add" data-act="addItem" data-room="${k}">+ Add item</button></div>`;
   }
   function staffOutTable(r, k) {
     const list = (r.outItems || {})[k] || [];
     const checked = list.length && !list[0].unchecked;
-    if (!checked) return `<p class="note">${list.length} barang dari check-in. Ambil foto, AI akan mencocokkan.</p>`;
-    const label = res => ({ ok: 'Sama', wr: 'Aus', rd: 'Rusak', gy: 'Belum difoto' }[res.k] || res.t);
+    if (!checked) return `<p class="note">${list.length} items from check-in. Take photos and the AI will compare them.</p>`;
+    const label = res => ({ ok: 'Same', wr: 'Worn', rd: 'Damaged', gy: 'Not photographed' }[res.k] || res.t);
     const others = capRooms(r, 'out').filter(x => x.id !== k);
     const row = it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td><b>${esc(it.name)}</b>${it.note ? `<br><span class="note">${esc(it.note)}</span>` : ''}</td><td>${it.inQty} · ${CONDS_ID[it.inCond]}</td>
-      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Hasil check-out">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select>
-      <select class="mvsel" data-ok="movedTo" data-room="${k}" data-iid="${it.id}" aria-label="Lokasi barang"><option value="">Di ruangan ini</option>${others.map(o => `<option value="${o.id}"${it.movedTo === o.id ? ' selected' : ''}>Pindah ke ${esc(o.id_)}</option>`).join('')}</select></td>
-      <td>${chip(res.k, res.k === 'mv' ? `Pindah ke ${roomName(it.movedTo, 'id')}` : label(res))}</td></tr>`; };
-    const head = '<tr><th>Barang</th><th>Check-in</th><th>Hasil / lokasi</th><th></th></tr>';
+      <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Check-out result">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select>
+      <select class="mvsel" data-ok="movedTo" data-room="${k}" data-iid="${it.id}" aria-label="Item location"><option value="">In this room</option>${others.map(o => `<option value="${o.id}"${it.movedTo === o.id ? ' selected' : ''}>Moved to ${esc(o.en)}</option>`).join('')}</select></td>
+      <td>${chip(res.k, res.k === 'mv' ? `Moved to ${roomName(it.movedTo)}` : label(res))}</td></tr>`; };
+    const head = '<tr><th>Item</th><th>Check-in</th><th>Result / location</th><th></th></tr>';
     const ch = list.filter(it => isChange(result(it)));
-    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} perubahan` : 'tidak ada perubahan'}.</b> Pilih hasil untuk tiap barang: Baik, Aus atau Rusak. Kalau barang dipindah ke ruangan lain (mis. sofa bed ada di Kamar 3), pilih "Pindah ke" dan foto barangnya di ruangan itu.</p>
+    return `<div class="ailist"><p class="note"><b>AI: ${ch.length ? `${ch.length} change${ch.length === 1 ? '' : 's'}` : 'no changes'}.</b> Choose a result for each item: Good, Worn or Damaged. If an item was moved to another room (e.g. the sofa bed is in Bedroom 3), choose "Moved to" and photograph it in that room.</p>
       ${ch.length ? `<div style="overflow-x:auto"><table class="itbl">${head}${ch.map(row).join('')}</table></div>` : ''}
-      <details class="all"><summary>Lihat semua ${list.length} barang</summary><div style="overflow-x:auto"><table class="itbl">${head}${list.map(row).join('')}</table></div></details></div>`;
+      <details class="all"><summary>Show all ${list.length} items</summary><div style="overflow-x:auto"><table class="itbl">${head}${list.map(row).join('')}</table></div></details></div>`;
   }
 
   function viewCapture(id) {
@@ -443,7 +443,7 @@
     const phase = phaseOf(r);
     const home = '#/staff';
     if (r.status !== 'in_draft' && r.status !== 'out_draft') {
-      app.innerHTML = `<div class="page narrow"><a href="${home}">← Kembali</a><div class="card"><p>Sudah dikirim ke manajer.</p></div></div>`;
+      app.innerHTML = `<div class="page narrow"><a href="${home}">← Back</a><div class="card"><p>Already sent to the manager.</p></div></div>`;
       return;
     }
     const photos = r[phase + 'Photos'] || (r[phase + 'Photos'] = {});
@@ -451,45 +451,45 @@
       const list = photos[room.id] || [];
       const busy = BUSY.has(`${r.id}:${phase}:${room.id}`);
       const ref = phase === 'out' ? (r.inPhotos[room.id] || []) : [];
-      const refHtml = phase === 'out' ? `<div class="note">Foto check-in</div><div class="refstrip">${ref.length ? ref.map(pid => phImg(pid, 'Check-in')).join('') : phEmpty('contoh')}</div>` : '';
+      const refHtml = phase === 'out' ? `<div class="note">Check-in photos</div><div class="refstrip">${ref.length ? ref.map(pid => phImg(pid, 'Check-in')).join('') : phEmpty('none')}</div>` : '';
       const body = busy
-        ? `<div class="aibusy"><div class="spin sm" aria-hidden="true"></div><span>AI sedang membaca foto ${esc(roomName(room.id, 'id'))}…</span></div>`
-        : phase === 'in' ? ((r.inItems || {})[room.id] ? staffInTable(r, room.id) : `<button class="add" data-act="addItem" data-room="${room.id}">+ Tambah barang manual (tanpa foto)</button>`) : staffOutTable(r, room.id);
+        ? `<div class="aibusy"><div class="spin sm" aria-hidden="true"></div><span>AI is reading the ${esc(roomName(room.id))} photos…</span></div>`
+        : phase === 'in' ? ((r.inItems || {})[room.id] ? staffInTable(r, room.id) : `<button class="add" data-act="addItem" data-room="${room.id}">+ Add items by hand (no photo)</button>`) : staffOutTable(r, room.id);
       return `<section class="room" id="room-${room.id}">
-        <h3>${esc(roomName(room.id, 'id'))} ${list.length ? chip('ok', `${list.length} foto`) : chip('', 'belum ada foto')}</h3>
+        <div class="roomhead"><h3>${esc(roomName(room.id))} ${list.length ? chip('ok', `${list.length} photo${list.length === 1 ? '' : 's'}`) : chip('', 'no photo yet')}</h3>${phase === 'in' ? `<button class="linkbtn rmroom" data-act="hideRoom" data-v="${r.villaId}" data-room="${room.id}">Remove room</button>` : ''}</div>
         ${refHtml}
         <div class="pick2">
-          <label class="btn filebtn">📷 Ambil foto<input type="file" accept="image/*" capture="environment" data-room="${room.id}" aria-label="Ambil foto ${esc(roomName(room.id, 'id'))}"></label>
-          <label class="btn ghost filebtn">Pilih dari galeri<input type="file" accept="image/*" multiple data-room="${room.id}" aria-label="Pilih dari galeri ${esc(roomName(room.id, 'id'))}"></label>
+          <label class="btn filebtn">📷 Take photo<input type="file" accept="image/*" capture="environment" data-room="${room.id}" aria-label="Take photo ${esc(roomName(room.id))}"></label>
+          <label class="btn ghost filebtn">Choose from gallery<input type="file" accept="image/*" multiple data-room="${room.id}" aria-label="Choose from gallery ${esc(roomName(room.id))}"></label>
         </div>
-        ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, 'id'))}<span class="old" data-old="${pid}" hidden>Foto lama</span><span class="dark" data-dark="${pid}" hidden>Terlalu gelap</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="Hapus foto">×</button></div>`).join('')}</div>` : ''}
-        ${(r.aiNote || {})[phase + ':' + room.id] ? `<div class="banner rd">AI: ${esc(r.aiNote[phase + ':' + room.id])} Ambil ulang foto ruangan ini.</div>` : ''}
-        ${!busy && ((r.aiState || {})[phase + ':' + room.id] === 'fail' || (r.aiState || {})[phase + ':' + room.id] === 'retake') && list.length ? `<button class="btn ghost sm" data-act="retryAi" data-room="${room.id}">↻ Coba AI lagi</button>` : ''}
-        ${phase === 'in' && !list.length && !((r.inItems || {})[room.id] || []).length ? `<button class="linkbtn" data-act="hideRoom" data-v="${r.villaId}" data-room="${room.id}">Ruangan ini tidak ada di villa ini</button>` : ''}
-        <div class="banner rd" data-darkmsg="${room.id}" hidden>Foto terlalu gelap, AI tidak bisa membacanya. Nyalakan lampu atau buka tirai, lalu ambil ulang. Hapus foto yang gelap.</div>
+        ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, 'id'))}<span class="old" data-old="${pid}" hidden>Old photo</span><span class="dark" data-dark="${pid}" hidden>Too dark</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="Remove photo">×</button></div>`).join('')}</div>` : ''}
+        ${(r.aiNote || {})[phase + ':' + room.id] ? `<div class="banner rd">AI: ${esc(r.aiNote[phase + ':' + room.id])} Retake the photos of this room.</div>` : ''}
+        ${!busy && ((r.aiState || {})[phase + ':' + room.id] === 'fail' || (r.aiState || {})[phase + ':' + room.id] === 'retake') && list.length ? `<button class="btn ghost sm" data-act="retryAi" data-room="${room.id}">↻ Try AI again</button>` : ''}
+        ${''}
+        <div class="banner rd" data-darkmsg="${room.id}" hidden>Photo too dark for the AI. Turn on the lights or open the curtains, then retake. Remove the dark photo.</div>
         ${body}
       </section>`;
     }).join('');
     const total = count(photos);
     const dKey = phase === 'in' ? 'invDate' : 'outInvDate';
     app.innerHTML = `<div class="page narrow">
-      <a href="${home}">← Kembali</a>
-      <div class="head"><div><p class="eyebrow">${phase === 'in' ? 'Inventaris check-in' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
-      <div class="card"><div class="fld"><label for="f-inv">Tanggal inventaris</label><input id="f-inv" type="date" data-f="${dKey}" value="${esc(r[dKey] || '')}"></div>
-        <p class="note">${phase === 'in' ? 'Boleh berbeda dengan tanggal check-in penyewa.' : 'Tanggal pengecekan saat check-out.'}</p></div>
-      <p class="sub">Ambil foto setiap ruangan. AI langsung membuat daftar barang di ruangan itu, lalu kamu cek dan perbaiki sebelum dikirim ke manajer.</p>
-      ${phase === 'out' ? `<div class="banner">Ambil foto dari sudut yang sama dengan foto check-in.</div>` : ''}
+      <a href="${home}">← Back</a>
+      <div class="head"><div><p class="eyebrow">${phase === 'in' ? 'Check-in inventory' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
+      <div class="card"><div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="${dKey}" value="${esc(r[dKey] || '')}"></div>
+        <p class="note">${phase === 'in' ? 'Can differ from the tenant\'s check-in date.' : 'The date of the check-out inspection.'}</p></div>
+      <p class="sub">Photograph every room. The AI lists the items in each room; check and correct the list before sending it to the manager.</p>
+      ${phase === 'out' ? `<div class="banner">Take the photos from the same angles as the check-in photos.</div>` : ''}
       <p class="note" id="busy" aria-live="polite" hidden></p>
       ${rooms}
       ${phase === 'in' ? `<div class="card addroom">
-        <h3>Tambah ruangan atau barang lain-lain</h3>
+        <h3>Add a room or miscellaneous items</h3>
         <div class="sugg">${ROOM_SUGGEST.filter(([en]) => !roomsFor(r.villaId).some(x => x.en === en)).map(([en, idn]) => `<button class="chipbtn" data-act="addRoom" data-v="${r.villaId}" data-name="${en}" data-name-id="${idn}">+ ${idn}</button>`).join('')}</div>
-        <div class="row"><input id="newRoom" placeholder="Nama ruangan lain, mis. Kamar 4" aria-label="Nama ruangan"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Tambah</button></div>
-        <p class="note">Ruangan baru tersimpan untuk villa ini dan muncul lagi di check-in dan check-out berikutnya.</p>
+        <div class="row"><input id="newRoom" placeholder="Other room name, e.g. Bedroom 4" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Add</button></div>
+        <p class="note">New rooms are saved for this villa and appear again at the next check-in and check-out.</p>
       </div>` : ''}
       <div class="sticky">
         <p class="err" role="alert" id="sendErr" hidden></p>
-        <button class="btn block" data-act="send" data-r="${r.id}">Kirim ke manajer (${total} foto)</button>
+        <button class="btn block" data-act="send" data-r="${r.id}">Send to manager (${total} photo${total === 1 ? '' : 's'})</button>
       </div>
     </div>`;
     confirmMissing = false;
@@ -510,20 +510,20 @@
     const busy = document.getElementById('busy');
     let oldN = 0, darkN = 0;
     for (let i = 0; i < files.length; i++) {
-      if (busy) { busy.hidden = false; busy.textContent = `Memproses foto ${i + 1} dari ${files.length}…`; }
+      if (busy) { busy.hidden = false; busy.textContent = `Processing photo ${i + 1} of ${files.length}…`; }
       try {
         const p = await compress(files[i]);
         if (p.old) oldN++;
         if (p.dark) darkN++;
         const id = uid();
-        try { await IDB.put(id, p); } catch (e2) { if (window.indexedDB) { toast('Memori perangkat penuh: foto tidak bisa disimpan. Kosongkan memori lalu ambil ulang.'); continue; } }
+        try { await IDB.put(id, p); } catch (e2) { if (window.indexedDB) { toast('Phone storage is full: the photo could not be saved. Free up space and retake.'); continue; } }
         PC.set(id, p);
         (r[phase + 'Photos'][room] = r[phase + 'Photos'][room] || []).push(id);
         save();
-      } catch (e) { toast('Satu foto tidak bisa dibaca. Coba foto JPG atau PNG.'); }
+      } catch (e) { toast('One photo could not be read. Try a JPG or PNG photo.'); }
     }
-    if (darkN) toast(`${darkN} foto terlalu gelap. Ambil ulang dengan cahaya lebih terang.`);
-    else if (oldN) toast(`${oldN} foto diambil lebih dari 24 jam lalu. Ditandai "Foto lama".`);
+    if (darkN) toast(`${darkN} photo${darkN === 1 ? ' is' : 's are'} too dark. Retake with more light.`);
+    else if (oldN) toast(`${oldN} photo${oldN === 1 ? ' was' : 's were'} taken more than 24 hours ago, marked "Old photo".`);
     const st = (r.aiState || {})[phase + ':' + room];
     const good = await goodPhotos(r[phase + 'Photos'][room]);
     const needAi = good.length && (st === 'fail' || st === 'retake' || (phase === 'in' ? !((r.inItems || {})[room] || []).length : ((r.outItems || {})[room] || [{}])[0].unchecked));
@@ -542,7 +542,7 @@
     BUSY.add(key); render(true);
     const sec = document.getElementById('room-' + room); if (sec) sec.scrollIntoView({ block: 'nearest' });
     const finish = msg => { BUSY.delete(key); save(); if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(msg); } };
-    const okMsg = phase === 'in' ? `AI selesai: ${roomName(room, 'id')}. Cek daftarnya.` : `AI selesai mencocokkan ${roomName(room, 'id')}.`;
+    const okMsg = phase === 'in' ? `AI done: ${roomName(room)}. Check the list.` : `AI finished comparing ${roomName(room)}.`;
     if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); r.aiState[phase + ':' + room] = 'ok'; finish(okMsg); }, 1600); return; }
     try {
       const photosB64 = [];
@@ -555,7 +555,7 @@
       const res = await api('gw-ai-room', { method: 'POST', body });
       if (!res || !res.ok) throw new Error((res && res.error) || 'AI error');
       r.aiNote = r.aiNote || {};
-      if (res.quality === 'retake') r.aiNote[phase + ':' + room] = res.quality_note || 'Foto kurang jelas.'; else delete r.aiNote[phase + ':' + room];
+      if (res.quality === 'retake') r.aiNote[phase + ':' + room] = res.quality_note || 'Photo not clear enough.'; else delete r.aiNote[phase + ':' + room];
       r.aiState[phase + ':' + room] = res.quality === 'retake' ? 'retake' : 'ok';
       if (phase === 'in') {
         r.inItems = r.inItems || {};
@@ -575,12 +575,12 @@
           list.push({ id: uid(), name: e.name, inQty: 0, inCond: 'Good', inNote: '', qty: parseInt(e.qty, 10) || 1, cond: e.cond || 'Good', note: e.note || 'Not on check-in list', unchecked: false, touched: false });
         });
       }
-      finish(res.quality === 'retake' ? 'AI: foto kurang jelas. Cek catatan di ruangan itu.' : okMsg);
+      finish(res.quality === 'retake' ? 'AI: photo not clear enough. See the note in that room.' : okMsg);
     } catch (e) {
       if (phase === 'in') { r.inItems = r.inItems || {}; r.inItems[room] = r.inItems[room] || []; }
       r.aiState[phase + ':' + room] = 'fail';
       if (e && e.status === 401) { BUSY.delete(key); return; }
-      finish('AI tidak bisa dihubungi. Tekan "Coba AI lagi", atau isi barang manual.');
+      finish('AI could not be reached. Tap "Try AI again", or add the items by hand.');
     }
   }
 
@@ -589,26 +589,33 @@
     const photos = r[phase + 'Photos'];
     const err = document.getElementById('sendErr');
     const total = count(photos);
-    if (!total) { err.hidden = false; err.textContent = 'Tambahkan minimal satu foto.'; return; }
+    if (!total) { err.hidden = false; err.textContent = 'Add at least one photo.'; return; }
     for (const ids of Object.values(photos)) { for (const pid of ids) {
       const p = await getPhoto(pid);
-      if (!p && !(r.photoFiles || {})[pid]) { err.hidden = false; err.textContent = 'Ada foto yang hilang dari perangkat ini (memori penuh?). Hapus foto yang kosong lalu ambil ulang.'; return; }
-      if (p && p.dark) { err.hidden = false; err.textContent = 'Masih ada foto yang terlalu gelap. Hapus foto itu (tanda merah) atau ambil ulang dulu.'; return; }
+      if (!p && !(r.photoFiles || {})[pid]) { err.hidden = false; err.textContent = 'A photo is missing from this phone (storage full?). Remove the empty photo and retake it.'; return; }
+      if (p && p.dark) { err.hidden = false; err.textContent = 'A photo is still too dark. Remove it (marked red) or retake it first.'; return; }
     } }
     if (phase === 'in') {
       const z = dropZeroQty(r);
-      if (z) toast(`${z} barang dengan jumlah 0 dihapus dari daftar.`);
+      if (z) toast(`${z} item${z === 1 ? '' : 's'} with quantity 0 removed from the list.`);
       const blank = Object.values(r.inItems || {}).some(l => l.some(i => !i.name.trim()));
-      if (blank) { err.hidden = false; err.textContent = 'Ada barang tanpa nama. Isi atau hapus.'; return; }
-      if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'Daftar barang masih kosong. Tunggu AI selesai atau tambah barang.'; return; }
+      if (blank) {
+        const rooms = Object.keys(r.inItems || {}).filter(k => r.inItems[k].some(i => !i.name.trim())).map(k => roomName(k));
+        err.hidden = false; err.textContent = `Some items have no name, in: ${rooms.join(', ')}. They are marked red: type a name or tap ✕ to remove.`;
+        const bad = Array.from(app.querySelectorAll('input.nm')).filter(x => !x.value.trim());
+        bad.forEach(x => x.classList.add('missing'));
+        if (bad[0]) { bad[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); bad[0].focus(); }
+        return;
+      }
+      if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'The item list is empty. Wait for the AI or add items.'; return; }
     }
-    const missing = capRooms(r, phase).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id, 'id'));
+    const missing = capRooms(r, phase).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id));
     if (missing.length) {
       err.hidden = false;
-      err.textContent = `Foto wajib untuk semua ruangan. Belum ada foto: ${missing.join(', ')}.${phase === 'in' ? ' Kalau ruangan itu tidak ada di villa ini, tekan "Ruangan ini tidak ada di villa ini".' : ''}`;
+      err.textContent = `Every room needs a photo. No photo yet: ${missing.join(', ')}.${phase === 'in' ? ' If a room does not exist in this villa, tap "Remove room" next to its name.' : ''}`;
       return;
     }
-    const done = overlay(LIVE ? 'Mengunggah foto dan data…' : 'Mengirim ke manajer…');
+    const done = overlay(LIVE ? 'Uploading photos and data…' : 'Sending to the manager…');
     const prev = r.status;
     r.status = phase === 'in' ? 'checkin_pending' : 'checkout_pending';
     r[phase + 'SentAt'] = Date.now();
@@ -617,12 +624,12 @@
     } catch (e) {
       r.status = prev; delete r._dirty; save(); done();
       if (e.status === 409 || e.status === 401) { onSaveError(r, e, ''); return; }
-      err.hidden = false; err.textContent = e.status === 403 && e.message ? e.message : 'Gagal mengirim. Cek koneksi internet, lalu tekan Kirim lagi.';
+      err.hidden = false; err.textContent = e.status === 403 && e.message ? e.message : 'Sending failed. Check the internet connection, then tap Send again.';
       return;
     }
     done();
     save();
-    toast('Terkirim. Manajer tinggal memeriksa dan menyetujui.');
+    toast('Sent. The manager will review and approve.');
     go('#/staff');
   }
 
@@ -696,7 +703,7 @@
   /* ---------- simulated AI (per room) ---------- */
   function simInRoom(r, roomId) {
     r.inItems = r.inItems || {};
-    if (!CAT[roomId]) { r.inItems[roomId] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: ubah nama atau hapus barang ini', src: 'ai', flag: '' }]; return; }
+    if (!CAT[roomId]) { r.inItems[roomId] = [{ id: uid(), name: 'Item seen in photo', qty: 1, cond: 'Good', note: 'Demo: rename or remove this item', src: 'ai', flag: '' }]; return; }
     r.inItems[roomId] = CAT[roomId].filter(([n]) => !HIDDEN.has(n)).map(([name, qty]) => ({
       id: uid(), name, qty, cond: name === 'Wine glasses' ? 'Damaged' : 'Good', note: name === 'Wine glasses' ? '1 cracked' : '',
       src: 'ai', flag: SMALL.has(name) ? 'small' : ''
@@ -1046,7 +1053,7 @@
         // The server checks the password and returns a signed token; nothing about passwords is kept on the device.
         let res;
         try { res = await api('gw-login', { method: 'POST', body: { email: em, password: pw } }); }
-        catch (e2) { err.hidden = false; err.textContent = e2.status === 401 ? 'Email or password is not correct.' : 'Server not reachable. Check the internet connection. / Server tidak dapat dihubungi.'; return; }
+        catch (e2) { err.hidden = false; err.textContent = e2.status === 401 ? 'Email or password is not correct.' : 'Server not reachable. Check the internet connection.'; return; }
         const u = res.user;
         S.token = res.token; S.user = u.id; S.role = u.role;
         S.users = (S.users || []).filter(x => x.id !== u.id).concat([u]);
@@ -1074,6 +1081,7 @@
   });
   app.addEventListener('input', e => {
     const t = e.target;
+    if (t.classList && t.classList.contains('missing') && t.value.trim()) t.classList.remove('missing');
     if (t.dataset.k && t.tagName === 'INPUT') inEdit(t);
     else if (t.dataset.ok === 'note') outEdit(t, false);
     else if (t.dataset.f) { const r = rec(location.hash.split('/')[3]); if (r) { r[t.dataset.f] = t.value; save(); } }
@@ -1117,6 +1125,7 @@
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
+    if (act === 'eye') { const inp = document.getElementById(b.dataset.for); if (inp) { const show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; b.classList.toggle('on', show); b.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); b.title = show ? 'Hide password' : 'Show password'; } return; }
     if (act === 'setPw') {
       const u = S.users.find(x => x.id === document.getElementById('cpUser').value), pw = document.getElementById('cpPw').value, err = document.getElementById('cpErr');
       if (!u || pw.length < 8) { err.hidden = false; err.textContent = 'The password needs at least 8 characters.'; return; }
@@ -1138,28 +1147,31 @@
       const inp = document.getElementById('newRoom'); const name = b.dataset.name || (inp ? inp.value.trim() : '');
       if (!name) { toast(T('Ketik nama ruangan dulu.', 'Type the room name first.')); return; }
       const v = villa(b.dataset.v); v.rooms = v.rooms || [];
-      if (roomsFor(v.id).some(x => x.en.toLowerCase() === name.toLowerCase())) { toast(T('Ruangan ini sudah ada.', 'This room already exists.')); return; }
+      if (roomsFor(v.id).some(x => x.en.toLowerCase() === name.toLowerCase())) { toast('This room already exists.'); return; }
+      const hidden = ROOMS.find(x => x.en.toLowerCase() === name.toLowerCase() && (v.hideRooms || []).indexOf(x.id) >= 0);
+      if (hidden) { v.hideRooms = v.hideRooms.filter(x => x !== hidden.id); pushSettings(); save(); toast(`${hidden.en} added back.`); render(true); return; }
       const room = { id: 'rm-' + uid(), en: name, id_: b.dataset.nameId || name }; v.rooms.push(room); pushSettings();
       if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) r.inItems[room.id] = []; }
       save(); toast(T(`${room.id_} ditambahkan. Ambil foto atau tambah barang.`, `${name} added.`)); render(true);
     }
     else if (act === 'startIn') {
       const r = { id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() };
-      S.records.push(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Belum tersimpan di server. Akan dicoba lagi saat dikirim.')); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
+      S.records.push(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
     }
-    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Belum tersimpan di server. Akan dicoba lagi saat dikirim.')); go(`#/staff/capture/${r.id}`); }
+    else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/staff/capture/${r.id}`); }
     else if (act === 'retryAi') {
       const r = rec(location.hash.split('/')[3]); if (!r) return; const phase = phaseOf(r);
-      goodPhotos((r[phase + 'Photos'] || {})[b.dataset.room]).then(good => { if (good.length) runAi(r, phase, b.dataset.room, good); else toast('Tambahkan foto yang terang dulu.'); });
+      goodPhotos((r[phase + 'Photos'] || {})[b.dataset.room]).then(good => { if (good.length) runAi(r, phase, b.dataset.room, good); else toast('Add a bright photo first.'); });
     }
     else if (act === 'hideRoom') {
       const v = villa(b.dataset.v); if (!v) return;
-      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tekan lagi untuk menghapus ruangan ini dari villa'; return; }
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to remove this room (its photos and items too)'; return; }
       const room = b.dataset.room;
       if (ROOMS.some(x => x.id === room)) v.hideRooms = (v.hideRooms || []).concat([room]);
       else v.rooms = (v.rooms || []).filter(x => x.id !== room);
-      const r = rec(location.hash.split('/')[3]); if (r && r.inItems) delete r.inItems[room];
-      save(); pushSettings(); toast('Ruangan dihapus dari villa ini.'); render(true);
+      const r = rec(location.hash.split('/')[3]);
+      if (r) { if (r.inItems) delete r.inItems[room]; if (r.inPhotos) delete r.inPhotos[room]; }
+      save(); pushSettings(); toast(`${roomName(room)} removed from this villa. Add it again under "Add a room" if needed.`); render(true);
     }
     else if (act === 'rmPhoto') {
       const r = rec(location.hash.split('/')[3]); const phase = r.status === 'in_draft' ? 'in' : 'out';

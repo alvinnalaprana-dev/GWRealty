@@ -5,16 +5,16 @@ Site: https://gwrealty.netlify.app (later inventory.gwrealtyglobal.com). Built b
 ## How it works (agreed with GW Realty, 20–22 Oct 2026)
 
 1. **Accounts.** Everyone signs in with email + password. The password is checked on the server, which returns a signed 30-day sign-in. The manager adds villas, reviews and approves, and creates staff accounts on the Team page. Staff only do inventories on their phone.
-2. **Check-in (staff, phone).** The inventory date can differ from the tenant's check-in date. Staff photograph **every room**; a room that does not exist in the villa is removed with "Ruangan ini tidak ada di villa ini". As soon as a room has a usable photo, AI lists its items (using that villa's amenity list for the room). Staff check, edit and add items and rooms. Items with quantity 0 are removed when sending and when approving.
+2. **Check-in (staff, phone).** The inventory date can differ from the tenant's check-in date. Staff photograph **every room**; a room that does not exist in the villa is removed with "Remove room" next to its name (it can be added back under "Add a room"). As soon as a room has a usable photo, AI lists its items (using that villa's amenity list for the room). Staff check, edit and add items and rooms. Items with quantity 0 are removed when sending and when approving.
 3. **Dark photos** are flagged on the phone, ignored by the AI, left out of the PDF, and must be removed or retaken before sending.
-4. **AI retry.** If the AI fails or asks for a retake, "Coba AI lagi" retries without losing items staff already typed.
+4. **AI retry.** If the AI fails or asks for a retake, "Try AI again" retries without losing items staff already typed.
 5. **Manager review.** Edits and approves only. Types the agreement code, optional tenant details (email is checked if filled), inventory, check-in and check-out dates.
 6. **PDF (English).** GW Realty logo and red; inventory date when it differs from check-in; tenant acknowledgement; signature lines for Owner / Villa / Listing (Owner's Representative) and Tenant. Printed and signed on paper.
 7. **Reminder.** Email to the manager at 08:00 WITA, 7 days before check-out.
 8. **Check-out.** The check-in list is pre-filled; staff photograph every room again; AI compares and flags changes. Each item has a Result (Good / Worn / Damaged; no "missing"). Items moved to another room (e.g. a sofa bed found in Bedroom 3) are marked "Moved to …", automatically when the AI spots them in the other room, or by hand. The manager can type an optional cost per change (0 is kept as "no charge"), also after approval. The check-out PDF shows check-in and check-out photos side by side.
 9. **Photos are evidence.** A photo removed in the app stays in Google Drive; only the folder owner deletes it.
 
-Staff screens are in Indonesian; manager screens and PDFs are in English. Item names follow GW Realty's own (English) inventory documents.
+All screens and PDFs are in English (changed from Indonesian staff screens on 25 Oct 2026). Item names follow GW Realty's own inventory documents.
 
 ## Modes (config.js)
 

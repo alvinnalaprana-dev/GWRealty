@@ -243,3 +243,11 @@ th{color:#fff;background:var(--accent)}
 
 .chip.mv{background:var(--ai-soft);color:var(--ai)}
 .mvsel{margin-top:4px;font-size:12px;max-width:100%}
+.roomhead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.roomhead h3{margin:0}
+.linkbtn.rmroom{border:1px solid var(--red);color:var(--red);background:transparent;text-transform:none;letter-spacing:0;font-size:13px;padding:6px 10px;min-height:32px}
+input.nm.missing{border-color:var(--red);background:var(--red-soft)}
+.pwwrap{position:relative;display:flex;align-items:center}
+.pwwrap input{width:100%;padding-right:44px}
+.eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:none;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.eye.on{color:var(--red)}
