@@ -2,7 +2,7 @@
   "name": "GW Inventory · 7 Check-out reminder (daily)",
   "nodes": [
     {
-      "id": "0da881e1-ff64-4ec1-8f6c-9cc4bdcbf065",
+      "id": "7cf723c6-17a4-4691-9063-2c46c84f9863",
       "name": "Every day 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -21,7 +21,7 @@
       }
     },
     {
-      "id": "66910f92-2837-4601-bda2-cc09b938d1f1",
+      "id": "cb9de453-6116-465b-b2fb-c1219077a430",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -51,7 +51,7 @@
       }
     },
     {
-      "id": "b074a90f-06dc-43e4-a009-126b5bb4c1e7",
+      "id": "d26a28fe-8741-442b-b329-0a84f5359927",
       "name": "Due in 7 days",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": "3620765e-4de3-4bfe-9d2b-10740c095c18",
+      "id": "6abfb181-7616-4bb4-9a81-8db47f258d74",
       "name": "Email manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,

@@ -13,7 +13,7 @@ FOLDER_REPORTS = '1xwvPe9PUaU2_wW9lJofF_e3YVR4gb6Vi'
 RECORDS = '1cNxJUgEy1X6dpenaPSc_0vIBuBLTaCrKYDcTRGHeYN8'
 TAB_GID = 1891781412          # the Records tab (renaming it is fine; deleting it is not)
 TAB_NAME = 'Records'
-COLS = ['recordId', 'agreement', 'villa', 'tenant', 'status', 'invDate', 'checkIn', 'checkOut', 'outInvDate', 'updatedAt', 'dataJson']
+COLS = ['recordId', 'agreement', 'villa', 'tenant', 'status', 'invDate', 'checkIn', 'checkOut', 'outInvDate', 'updatedAt', 'dataJson', 'dataJson2', 'dataJson3', 'dataJson4', 'dataJson5', 'dataJson6']
 
 secrets = {}
 if len(sys.argv) > 2:
@@ -98,7 +98,7 @@ out['GW-2-Save-record'] = wf('GW Inventory · 2 Save record + photos', [
                     "sheetName": {"__rl": True, "value": TAB_GID, "mode": "list", "cachedResultName": TAB_NAME},
                     "columns": {"mappingMode": "defineBelow", "value": {k: "={{ $json.%s }}" % k for k in COLS}, "matchingColumns": ["recordId"],
                                 "schema": [{"id": k, "displayName": k, "required": False, "defaultMatch": False, "display": True, "type": "string", "canBeUsedToMatch": True} for k in COLS]},
-                    "options": {}}, "credentials": GS()},
+                    "options": {"cellFormat": "RAW"}}, "credentials": GS()},
     respond('Respond', (1760, -100), "={{ JSON.stringify({ ok: true, recordId: $('Build row').first().json.recordId, photoFiles: $('Build row').first().json._photoFiles, updatedAt: $('Build row').first().json.updatedAt }) }}"),
     respond_err((880, 120))],
     conn([('Webhook', 'Read records'), ('Read records', 'Check and prepare'), ('Check and prepare', 'Allowed?'), ('Allowed?', 'Has photos?', 0), ('Allowed?', 'Refuse', 1),

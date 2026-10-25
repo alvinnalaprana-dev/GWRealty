@@ -113,8 +113,10 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
     r.status = 'settings';
   } else if (who.role !== 'mgr') {
     if (GW_STAFF_STATUS.indexOf(r.status) < 0) return { ok: false, status: 403, error: 'Only the manager can approve.' };
-    if (existing && GW_STAFF_STATUS.indexOf(existing.status) < 0 && !(existing.status === 'occupied' && r.status === 'out_draft')) {
-      return { ok: false, status: 403, error: 'This record is waiting for the manager.' };
+    // Staff may only edit drafts (or start a check-out on an occupied villa). Once sent, the record belongs to the manager.
+    const draft = existing && (existing.status === 'in_draft' || existing.status === 'out_draft');
+    if (existing && !draft && !(existing.status === 'occupied' && r.status === 'out_draft')) {
+      return { ok: false, status: 403, error: 'This record has already been sent to the manager.' };
     }
     if (existing) GW_PRIVATE.forEach(k => { if (existing[k] !== undefined) r[k] = existing[k]; else delete r[k]; });
     else GW_PRIVATE.forEach(k => delete r[k]);
@@ -123,4 +125,12 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
   return { ok: true, status: 200, record: r };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { gwSha256, gwHmac, gwPwHash, gwMakeToken, gwVerifyToken, gwHeader, gwSettings, gwLogin, gwWho, gwList, gwPrepareSave, gwPublicUser };
+/* ---------- sheet storage: one record may be split over several cells (Google Sheets limit: 50,000 characters per cell) ---------- */
+const GW_CHUNK = 45000, GW_CHUNKS = ['dataJson', 'dataJson2', 'dataJson3', 'dataJson4', 'dataJson5', 'dataJson6'];
+function gwJoinRow(row) { return GW_CHUNKS.map(k => (row && row[k]) || '').join(''); }
+function gwSplitJson(json) {
+  if (json.length > GW_CHUNK * GW_CHUNKS.length) return null;
+  const out = {}; GW_CHUNKS.forEach((k, i) => { out[k] = json.slice(i * GW_CHUNK, (i + 1) * GW_CHUNK); }); return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { gwSha256, gwHmac, gwPwHash, gwMakeToken, gwVerifyToken, gwHeader, gwSettings, gwLogin, gwWho, gwList, gwPrepareSave, gwPublicUser, gwJoinRow, gwSplitJson };

@@ -617,9 +617,12 @@
     }
     const done = overlay(LIVE ? 'Uploading photos and data…' : 'Sending to the manager…');
     const prev = r.status;
-    r.status = phase === 'in' ? 'checkin_pending' : 'checkout_pending';
-    r[phase + 'SentAt'] = Date.now();
     try {
+      // Upload every photo first while the record is still a draft; only then mark it as sent in one last small save.
+      // (A manager must never see it as "to review" while photos are still uploading: the late upload would overwrite the approval.)
+      if (LIVE) await pushRecord(r);
+      r.status = phase === 'in' ? 'checkin_pending' : 'checkout_pending';
+      r[phase + 'SentAt'] = Date.now();
       if (LIVE) await pushRecord(r); else await new Promise(res => setTimeout(res, 1000));
     } catch (e) {
       r.status = prev; delete r._dirty; save(); done();
