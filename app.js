@@ -425,7 +425,7 @@
     if (!checked) return `<p class="note">${list.length} items from check-in. Take photos and the AI will compare them.</p>`;
     const label = res => ({ ok: 'Same', wr: 'Worn', rd: 'Damaged', gy: 'Not photographed' }[res.k] || res.t);
     const others = capRooms(r, 'out').filter(x => x.id !== k);
-    const row = it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td><b>${esc(it.name)}</b>${it.note ? `<br><span class="note">${esc(it.note)}</span>` : ''}</td><td>${it.inQty} · ${CONDS_ID[it.inCond]}</td>
+    const row = it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td><b>${esc(it.name)}</b>${it.note ? `<br><span class="note">${esc(it.note)}</span>` : ''}</td><td>${it.inQty > 0 ? `${it.inQty} · ${CONDS_ID[it.inCond]}` : 'Not at check-in'}</td>
       <td><select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Check-out result">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select>
       <select class="mvsel" data-ok="movedTo" data-room="${k}" data-iid="${it.id}" aria-label="Item location"><option value="">In this room</option>${others.map(o => `<option value="${o.id}"${it.movedTo === o.id ? ' selected' : ''}>Moved to ${esc(o.en)}</option>`).join('')}</select></td>
       <td>${chip(res.k, res.k === 'mv' ? `Moved to ${roomName(it.movedTo)}` : label(res))}</td></tr>`; };
@@ -620,14 +620,21 @@
     try {
       // Upload every photo first while the record is still a draft; only then mark it as sent in one last small save.
       // (A manager must never see it as "to review" while photos are still uploading: the late upload would overwrite the approval.)
-      if (LIVE) await pushRecord(r);
+      if (LIVE) {
+        await pushRecord(r);
+        // Every usable photo must now have its Drive copy; otherwise stay a draft so staff can send again.
+        const ids = []; Object.values(photos).forEach(l => l.forEach(pid => ids.push(pid)));
+        const good = await goodPhotos(ids);
+        const missingUp = good.filter(pid => !(r.photoFiles || {})[pid]);
+        if (missingUp.length) { const e2 = new Error('upload'); e2.status = 0; e2.missing = missingUp.length; throw e2; }
+      }
       r.status = phase === 'in' ? 'checkin_pending' : 'checkout_pending';
       r[phase + 'SentAt'] = Date.now();
       if (LIVE) await pushRecord(r); else await new Promise(res => setTimeout(res, 1000));
     } catch (e) {
       r.status = prev; delete r._dirty; save(); done();
       if (e.status === 409 || e.status === 401) { onSaveError(r, e, ''); return; }
-      err.hidden = false; err.textContent = e.status === 403 && e.message ? e.message : 'Sending failed. Check the internet connection, then tap Send again.';
+      err.hidden = false; err.textContent = e.missing ? `${e.missing} photo${e.missing === 1 ? '' : 's'} did not upload. Check the internet connection, then tap Send again.` : e.status === 403 && e.message ? e.message : 'Sending failed. Check the internet connection, then tap Send again.';
       return;
     }
     done();
@@ -738,6 +745,7 @@
     if (it.movedTo) return { k: 'mv', t: `Moved to ${roomName(it.movedTo, 'en')}` };
     return { k: 'ok', t: it.cond === 'Good' ? 'Good' : it.cond + ' (as at check-in)' };
   }
+  const inCol = it => it.inQty > 0 ? `${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}` : '<span class="note">Not at check-in</span>';
   const isChange = res => res.k === 'wr' || res.k === 'rd' || res.k === 'mv';
   const fmtIDR = n => hasCost(n) ? 'Rp ' + Number(n).toLocaleString('id-ID') : '';
   const costTotal = ch => { const w = ch.filter(x => hasCost(x.it.cost)); return w.length ? w.reduce((a, x) => a + Number(x.it.cost), 0) : null; };
@@ -838,7 +846,7 @@
     const noteCell = (k, it) => edit ? `<input data-ok="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note">` : `<span class="note">${esc(it.note)}</span>`;
     const costCell = (k, it) => costEdit ? `<input class="cost" inputmode="numeric" data-ok="cost" data-room="${k}" data-iid="${it.id}" value="${hasCost(it.cost) ? Number(it.cost).toLocaleString('id-ID') : ''}" placeholder="Optional" aria-label="Cost in rupiah">` : fmtIDR(it.cost);
     const total = costTotal(ch);
-    const chRows = ch.length ? ch.map(({ room, it, res }) => `<tr class="chg"><td><b>${esc(it.name)}</b></td><td>${esc(roomName(room, 'en'))}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(room, it)}${it.movedTo ? `<br><span class="note">Moved to ${esc(roomName(it.movedTo, 'en'))}</span>` : ''}</td><td>${noteCell(room, it)}</td><td>${costCell(room, it)}</td></tr>`).join('')
+    const chRows = ch.length ? ch.map(({ room, it, res }) => `<tr class="chg"><td><b>${esc(it.name)}</b></td><td>${esc(roomName(room, 'en'))}</td><td>${inCol(it)}</td><td>${condCell(room, it)}${it.movedTo ? `<br><span class="note">Moved to ${esc(roomName(it.movedTo, 'en'))}</span>` : ''}</td><td>${noteCell(room, it)}</td><td>${costCell(room, it)}</td></tr>`).join('')
       : `<tr><td colspan="6" class="note">No changes. Everything is in the same condition as at check-in.</td></tr>`;
     const blocks = Object.keys(r.outItems || {}).map(k => {
       const list = r.outItems[k];
@@ -852,7 +860,7 @@
           <h3>${esc(roomName(k, 'en'))} ${chip('', plural(list.length, 'item'))}</h3>
           <details class="all"><summary>Show all ${list.length} items</summary>
           <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Check-in</th><th>Result</th></tr>
-          ${list.map(it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td>${esc(it.name)}</td><td>${it.inQty} · ${it.inCond}${it.inNote ? ` (${esc(it.inNote)})` : ''}</td><td>${condCell(k, it)}${it.movedTo ? ` <span class="note">→ ${esc(roomName(it.movedTo, 'en'))}</span>` : ''}</td></tr>`; }).join('')}
+          ${list.map(it => { const res = result(it); return `<tr class="${isChange(res) ? 'chg' : ''}"><td>${esc(it.name)}</td><td>${inCol(it)}</td><td>${condCell(k, it)}${it.movedTo ? ` <span class="note">→ ${esc(roomName(it.movedTo, 'en'))}</span>` : ''}</td></tr>`; }).join('')}
           </table></div></details>
           <p class="note">${nCh ? `${nCh} change${nCh === 1 ? '' : 's'} in this room` : 'No changes in this room'}</p>
         </div>
@@ -994,7 +1002,7 @@
         if (ch.length) {
           const total = costTotal(ch);
           table(['Item', 'Room', 'Check-in', 'Result', 'Note', 'Cost (IDR)'],
-            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), `${it.inQty} ${it.inCond}`, res.t, it.note || '', hasCost(it.cost) ? Number(it.cost).toLocaleString('id-ID') : '']),
+            ch.map(({ room, it, res }) => [it.name, roomName(room, 'en'), it.inQty > 0 ? `${it.inQty} ${it.inCond}` : 'Not at check-in', res.t, it.note || '', hasCost(it.cost) ? Number(it.cost).toLocaleString('id-ID') : '']),
             { 5: { cellWidth: 30, halign: 'right', minCellHeight: 8 } },
             ['', '', '', '', 'Total', total === null ? '' : total.toLocaleString('id-ID')]);
           doc.setFontSize(8); doc.setTextColor(...MUTED);
@@ -1004,7 +1012,7 @@
         for (const k of Object.keys(r.outItems || {})) {
           roomTitle(roomName(k, 'en'), plural(r.outItems[k].length, 'item'));
           await photoPair(r.inPhotos[k] || [], r.outPhotos[k] || []);
-          table(['Item', 'Check-in', 'Result'], r.outItems[k].map(it => [it.name, `${it.inQty} ${it.inCond}`, result(it).t]), { 1: { cellWidth: 34 }, 2: { cellWidth: 44 } });
+          table(['Item', 'Check-in', 'Result'], r.outItems[k].map(it => [it.name, it.inQty > 0 ? `${it.inQty} ${it.inCond}` : 'Not at check-in', result(it).t]), { 1: { cellWidth: 34 }, 2: { cellWidth: 44 } });
         }
       }
       // tenant acknowledgement + signatures
