@@ -1,6 +1,6 @@
 /* GW Realty Inventory.
    Records are kept on the device (localStorage, photos in IndexedDB) and synced with the server:
-   the Netlify demo backend (DEMO) or the n8n workflows on Alvin's server (TEST/live).
+   the n8n workflows on GW Realty's server (live system).
    Sign-in, permissions and overwrite protection are checked on the server. */
 (function () {
   'use strict';
@@ -287,7 +287,7 @@
     const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staff · ${u ? u.name : ''}` : '';
     barEl.innerHTML = `<div class="bar-in">
       <a class="brand" href="#/"><img src="logo-white.png" alt="GW Realty"><span>Inventory</span></a>
-      <div class="bar-r"><span class="demo">${esc(API.label || (LIVE ? 'TEST' : 'DEMO'))}</span>${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">Sign out</button>` : ''}</div>
+      <div class="bar-r">${API.label ? `<span class="demo">${esc(API.label)}</span>` : ''}${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">Sign out</button>` : ''}</div>
     </div>`;
   }
 
@@ -321,7 +321,7 @@
   /* ---------- login ---------- */
   function viewLogin() {
     S.role = null; S.user = null; S.token = null; document.documentElement.lang = 'en'; renderBar();
-    const demo = !LIVE || (API.label || '').toUpperCase() === 'DEMO';
+    const demo = !LIVE;
     app.innerHTML = `<div class="login">
       <p class="eyebrow">GW Realty</p>
       <h1>Villa Inventory</h1>
@@ -775,7 +775,7 @@
 
   function photoCol(list, label, max) {
     const ids = (list || []).slice(0, max || 4);
-    return ids.length ? ids.map(pid => phImg(pid, label)).join('') : phEmpty(label === 'Check-in' ? 'No photo (sample data)' : 'No photo');
+    return ids.length ? ids.map(pid => phImg(pid, label)).join('') : phEmpty(label === 'Check-in' ? 'No photo' : 'No photo');
   }
 
   function viewCheckIn(r) {

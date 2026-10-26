@@ -1,6 +1,6 @@
 # GW Realty Villa Inventory
 
-Site: https://gwrealty.netlify.app (later inventory.gwrealtyglobal.com). Built by Kriyator.
+Site: https://inventory.gwrealtyglobal.com (also https://gwrealty.netlify.app). Built by Kriyator.
 
 ## How it works (agreed with GW Realty, 20–22 Oct 2026)
 
@@ -16,12 +16,11 @@ Site: https://gwrealty.netlify.app (later inventory.gwrealtyglobal.com). Built b
 
 All screens and PDFs are in English (changed from Indonesian staff screens on 25 Oct 2026). Item names follow GW Realty's own inventory documents.
 
-## Modes (config.js)
+## Live system (config.js)
 
-- **DEMO** (default): shared demo backend on Netlify (`netlify/functions/gw.mjs`), sample villas, simulated AI, public demo accounts shown on the login screen. Same server rules as the real system.
-- **TEST / live**: open the site once with `?live=1` on a device (`?demo=1` switches back). Talks to the n8n workflows on Alvin's server: real Claude AI, photos and PDFs in Google Drive, records in the Google Sheet. At launch set `MODE_DEFAULT = 'live'`.
+Live since 26 Oct 2026 at https://inventory.gwrealtyglobal.com (gwrealty.netlify.app still works). The app talks only to the n8n workflows on the server: Claude AI, photos and PDFs in Google Drive, records in the Google Sheet. There is no demo mode any more; the old demo backend is kept in `dev/demo-backend.mjs` for local testing only and is not deployed.
 
-## Security (live)
+## Security
 
 - No key in the page. Each request carries the person's signed sign-in; n8n checks it, that the account still exists (removed staff lose access at once), and what that role may do (staff cannot approve, change accounts or see tenant contact details).
 - A save is refused if someone else saved a newer copy of the same record first; the app then loads the latest version.
@@ -34,7 +33,7 @@ All screens and PDFs are in English (changed from Indonesian staff screens on 25
 ## Files
 
 - `index.html`, `styles.css`, `app.js`, `data.js` (rooms, demo list, GW Realty's real villas with per-room amenity lists), `config.js`
-- `netlify/functions/gw.mjs`: demo backend
+- `dev/demo-backend.mjs`: old demo backend (local testing only, not deployed)
 - `n8n/`: the workflows and setup notes; `n8n/src/` holds the Code node sources and `build.py`
 - `docs/overview.html`, `docs/mockup.html`: early client documents (superseded by this README where they differ)
 

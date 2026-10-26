@@ -1,11 +1,7 @@
-# Static site plus one function (temporary shared demo storage in netlify/functions).
+# Static site. The data lives on the n8n server (see n8n/).
 [build]
   publish = "."
   command = ""
-
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
 
 [[headers]]
   for = "/*"
