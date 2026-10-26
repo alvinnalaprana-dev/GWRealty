@@ -22,7 +22,14 @@ export default async (req) => {
   const all = await readAll();
   const recs = Object.values(all);
 
-  if (ep === 'gw-login') { const r = core.gwLogin(body, recs, BOOT, SECRET); return json(r, r.status); }
+  if (ep === 'gw-login') {
+    const limits = (await store.get('limits', { type: 'json' })) || {};
+    const r = core.gwLogin(body, recs, BOOT, SECRET, limits);
+    await store.setJSON('limits', limits);
+    if (r._upgrade) { all._settings = r._upgrade; await store.setJSON('records', all); }
+    delete r._upgrade;
+    return json(r, r.status);
+  }
   const who = core.gwWho(req.headers.get('x-gw-token'), recs, BOOT, SECRET);
   if (!who) return json({ ok: false, error: 'Please sign in again.' }, 401);
 
@@ -53,7 +60,10 @@ export default async (req) => {
   }
 
   if (ep === 'gw-photo') {
-    const b64 = await store.get('photo:' + (url.searchParams.get('id') || ''));
+    const fid = url.searchParams.get('id') || '';
+    // Same rule as the live system: only photos that belong to a record.
+    if (!recs.some(r => r.photoFiles && Object.values(r.photoFiles).indexOf(fid) >= 0)) return json({ error: 'not found' }, 404);
+    const b64 = await store.get('photo:' + fid);
     if (!b64) return json({ error: 'not found' }, 404);
     return new Response(Buffer.from(b64, 'base64'), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400' } });
   }

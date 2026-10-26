@@ -342,18 +342,19 @@
   /* ---------- team (manager creates accounts) ---------- */
   function viewTeam() {
     const rows = S.users.map(u => `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.email)}</td><td>${u.role === 'mgr' ? chip('ok', 'Manager') : chip('', 'Staff')}</td>
-      <td style="text-align:right">${u.role === 'staff' ? `<button class="btn ghost sm" data-act="delUser" data-u="${u.id}">Remove</button>` : ''}</td></tr>`).join('');
+      <td style="text-align:right">${u.id !== S.user ? `<button class="btn ghost sm" data-act="delUser" data-u="${u.id}">Remove</button>` : '<span class="note">You</span>'}</td></tr>`).join('');
     app.innerHTML = `<div class="page narrow">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">Accounts</p><h1>Team</h1></div></div>
-      <p class="sub">The manager adds villas and reviews every inventory. Staff only do the inventory on their phone. Create an account for each staff member and tell them their password.</p>
+      <p class="sub">Managers add villas, review every inventory and manage accounts. Staff only do the inventory on their phone. Create an account for each person and tell them their password. Keep a second manager account (e.g. a backup) so a forgotten manager password can always be reset here.</p>
       <div class="tbl"><table class="vt"><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>${rows}</table></div>
       <div class="card">
-        <h3>Create staff account</h3>
+        <h3>Create an account</h3>
         <div class="form">
           <div class="fld"><label for="nuName">Name</label><input id="nuName" placeholder="e.g. Komang"></div>
           <div class="fld"><label for="nuEmail">Email</label><input id="nuEmail" type="email" placeholder="komang@gwrealtyglobal.com"></div>
           <div class="fld"><label for="nuPw">Password</label><div class="pwwrap"><input id="nuPw" type="password" autocomplete="new-password" placeholder="At least 8 characters">${EYE('nuPw')}</div></div>
+          <div class="fld"><label for="nuRole">Role</label><select id="nuRole"><option value="staff">Staff (inventory on phone)</option><option value="mgr">Manager (review, villas, accounts)</option></select></div>
         </div>
         <p class="err" role="alert" id="nuErr" hidden></p>
         <button class="btn" data-act="addUser">Create account</button>
@@ -1064,7 +1065,7 @@
         // The server checks the password and returns a signed token; nothing about passwords is kept on the device.
         let res;
         try { res = await api('gw-login', { method: 'POST', body: { email: em, password: pw } }); }
-        catch (e2) { err.hidden = false; err.textContent = e2.status === 401 ? 'Email or password is not correct.' : 'Server not reachable. Check the internet connection.'; return; }
+        catch (e2) { err.hidden = false; err.textContent = e2.status === 401 ? 'Email or password is not correct.' : e2.status === 429 ? (e2.message || 'Too many wrong passwords. Try again later.') : 'Server not reachable. Check the internet connection.'; return; }
         const u = res.user;
         S.token = res.token; S.user = u.id; S.role = u.role;
         S.users = (S.users || []).filter(x => x.id !== u.id).concat([u]);
@@ -1148,9 +1149,11 @@
       if (S.users.some(u => u.email.toLowerCase() === em.toLowerCase())) { err.hidden = false; err.textContent = 'An account with this email already exists.'; return; }
       const pw = document.getElementById('nuPw').value;
       if (pw.length < 8) { err.hidden = false; err.textContent = 'The password needs at least 8 characters.'; return; }
-      pwHash(em, pw).then(async h => { S.users.push(Object.assign({ id: uid(), name: n, email: em, role: 'staff' }, LIVE ? { pwNew: h } : { pw: h })); save(); await pushSettings(); toast(`Account created for ${n}. Tell them their password.`); render(); });
+      const role = (document.getElementById('nuRole') || {}).value === 'mgr' ? 'mgr' : 'staff';
+      pwHash(em, pw).then(async h => { S.users.push(Object.assign({ id: uid(), name: n, email: em, role }, LIVE ? { pwNew: h } : { pw: h })); save(); await pushSettings(); toast(`${role === 'mgr' ? 'Manager' : 'Staff'} account created for ${n}. Tell them their password.`); render(); });
     }
     else if (act === 'delUser') {
+      if (b.dataset.u === S.user) { toast('You cannot remove your own account.'); return; }
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to remove'; return; }
       S.users = S.users.filter(u => u.id !== b.dataset.u); save(); pushSettings(); render(true);
     }

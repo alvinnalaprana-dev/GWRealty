@@ -26,7 +26,10 @@ All screens and PDFs are in English (changed from Indonesian staff screens on 25
 - No key in the page. Each request carries the person's signed sign-in; n8n checks it, that the account still exists (removed staff lose access at once), and what that role may do (staff cannot approve, change accounts or see tenant contact details).
 - A save is refused if someone else saved a newer copy of the same record first; the app then loads the latest version.
 - Photos can only be fetched if they belong to a record.
-- Limits: no rate limit on sign-in attempts (use passwords of 8+ characters); the sign-in signing secret lives only in n8n.
+- Passwords are stored salted and slow-hashed (PBKDF2, 10,000 rounds); older hashes are upgraded on the next sign-in.
+- 5 wrong passwords for one email lock it for 15 minutes.
+- Staff cannot change a record once it is sent. The PDF step only accepts real PDFs from a manager.
+- The sign-in signing secret lives only in n8n.
 
 ## Files
 

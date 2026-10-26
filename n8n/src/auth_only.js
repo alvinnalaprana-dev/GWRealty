@@ -1,3 +1,4 @@
-// Signed-in users only (token check; no sheet read needed).
-const t = gwVerifyToken(gwHeader($input.first().json.headers, 'x-gw-token'), SECRET);
-if (!t) return deny(401, 'Please sign in again.');
+// Signed-in users only, and the account must still exist (removed accounts lose access at once).
+const recs = gwRows($input.all());
+const who = gwWho(gwHeader($('Webhook').first().json.headers, 'x-gw-token'), recs, BOOT, SECRET);
+if (!who) return deny(401, 'Please sign in again.');

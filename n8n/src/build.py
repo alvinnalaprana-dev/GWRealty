@@ -67,22 +67,33 @@ def wf(name, nodes, connections):
 
 out = {}
 # 0. Login
+def upsert(name, pos, src_expr='$json'):
+    return {"id": nid(), "name": name, "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.5, "position": list(pos),
+            "parameters": {"operation": "appendOrUpdate", "documentId": {"__rl": True, "value": RECORDS, "mode": "id"},
+                           "sheetName": {"__rl": True, "value": TAB_GID, "mode": "list", "cachedResultName": TAB_NAME},
+                           "columns": {"mappingMode": "defineBelow", "value": {k: "={{ %s.%s }}" % (src_expr, k) for k in COLS}, "matchingColumns": ["recordId"],
+                                       "schema": [{"id": k, "displayName": k, "required": False, "defaultMatch": False, "display": True, "type": "string", "canBeUsedToMatch": True} for k in COLS]},
+                           "options": {"cellFormat": "RAW"}}, "credentials": GS()}
+
 out['GW-0-Login'] = wf('GW Inventory · 0 Login', [
     webhook('gw-login'), read_all((220, 0)), code('Check login', WITH_CORE(src('login.js')), (440, 0)),
-    respond('Respond', (660, 0), "={{ JSON.stringify($json) }}", "={{ $json.status || 200 }}")],
-    conn([('Webhook', 'Read records'), ('Read records', 'Check login'), ('Check login', 'Respond')]))
+    if_one('Upgrade password?', "={{ $json._row ? 1 : 0 }}", (660, 0)),
+    upsert('Save upgraded password', (880, -100), '$json._row'),
+    respond('Respond', (1100, 0), "={{ JSON.stringify(Object.assign({}, $('Check login').first().json, { _row: undefined })) }}", "={{ $('Check login').first().json.status || 200 }}")],
+    conn([('Webhook', 'Read records'), ('Read records', 'Check login'), ('Check login', 'Upgrade password?'),
+          ('Upgrade password?', 'Save upgraded password', 0), ('Upgrade password?', 'Respond', 1), ('Save upgraded password', 'Respond')]))
 
 # 1. AI per room
 out['GW-1-AI-room'] = wf('GW Inventory · 1 AI per room', [
-    webhook('gw-ai-room'), code('Prepare request', WITH_CORE(src('auth_only.js') + '\n' + src('ai_prepare.js')), (220, 0)), OK_IF((440, 0)),
-    {"id": nid(), "name": "Claude API", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [660, -100],
+    webhook('gw-ai-room'), read_all((220, 0)), code('Prepare request', WITH_CORE(src('auth_only.js') + '\n' + src('ai_prepare.js')), (440, 0)), OK_IF((660, 0)),
+    {"id": nid(), "name": "Claude API", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [880, -100],
      "parameters": {"method": "POST", "url": "https://api.anthropic.com/v1/messages", "authentication": "genericCredentialType",
                     "genericAuthType": "httpHeaderAuth", "sendHeaders": True,
                     "headerParameters": {"parameters": [{"name": "anthropic-version", "value": "2023-06-01"}]},
                     "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.body) }}", "options": {"timeout": 90000}},
      "credentials": {"httpHeaderAuth": {"id": cred_id('anthropic'), "name": "GW Anthropic API key"}}},
-    code('Parse reply', src('ai_parse.js'), (880, -100)), respond('Respond', (1100, -100)), respond_err((660, 120))],
-    conn([('Webhook', 'Prepare request'), ('Prepare request', 'Allowed?'), ('Allowed?', 'Claude API', 0), ('Allowed?', 'Refuse', 1),
+    code('Parse reply', src('ai_parse.js'), (1100, -100)), respond('Respond', (1320, -100)), respond_err((880, 120))],
+    conn([('Webhook', 'Read records'), ('Read records', 'Prepare request'), ('Prepare request', 'Allowed?'), ('Allowed?', 'Claude API', 0), ('Allowed?', 'Refuse', 1),
           ('Claude API', 'Parse reply'), ('Parse reply', 'Respond')]))
 
 # 2. Save record + photos
@@ -122,12 +133,12 @@ out['GW-4-Photo'] = wf('GW Inventory · 4 Photo', [
 
 # 6. Save PDF
 out['GW-6-Save-PDF'] = wf('GW Inventory · 6 Save PDF', [
-    webhook('gw-save-pdf'), code('PDF to file', WITH_CORE(src('pdf_file.js')), (220, 0)), OK_IF((440, 0)),
+    webhook('gw-save-pdf'), read_all((220, 0)), code('PDF to file', WITH_CORE(src('pdf_file.js')), (440, 0)), OK_IF((660, 0)),
     {"id": nid(), "name": "Upload PDF", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [660, -100],
      "parameters": {"name": "={{ $json.fileName }}", "driveId": {"__rl": True, "value": "My Drive", "mode": "list", "cachedResultName": "My Drive"},
                     "folderId": {"__rl": True, "value": FOLDER_REPORTS, "mode": "id"}, "options": {}}, "credentials": GD()},
     respond('Respond', (880, -100), "={{ JSON.stringify({ ok: true, fileId: $json.id }) }}"), respond_err((660, 120))],
-    conn([('Webhook', 'PDF to file'), ('PDF to file', 'Allowed?'), ('Allowed?', 'Upload PDF', 0), ('Allowed?', 'Refuse', 1), ('Upload PDF', 'Respond')]))
+    conn([('Webhook', 'Read records'), ('Read records', 'PDF to file'), ('PDF to file', 'Allowed?'), ('Allowed?', 'Upload PDF', 0), ('Allowed?', 'Refuse', 1), ('Upload PDF', 'Respond')]))
 
 # 7. Reminder
 rem_read = read_all((220, 0)); rem_read.pop('alwaysOutputData')

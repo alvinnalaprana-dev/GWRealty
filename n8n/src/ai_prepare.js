@@ -5,7 +5,7 @@
 const MODEL = 'claude-haiku-5-5';   // change to 'claude-sonnet-5-5' if Haiku misses too much
 const MAX_PHOTOS = 4;
 
-const b = $input.first().json.body || {};
+const b = $('Webhook').first().json.body || {};
 const photos = (Array.isArray(b.photos) ? b.photos : []).slice(0, MAX_PHOTOS)
   .map(p => String(p).replace(/^data:image\/\w+;base64,/, ''));
 if (!photos.length) throw new Error('No photos sent');

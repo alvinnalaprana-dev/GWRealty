@@ -40,7 +40,29 @@ function gwEq(a, b) { a = String(a); b = String(b); if (a.length !== b.length) r
 
 /* ---------- passwords and tokens ---------- */
 const GW_TOKEN_DAYS = 30;
-const gwPwHash = (email, pw) => gwSha256(String(email).toLowerCase().trim() + ':' + pw);
+const gwPwHash = (email, pw) => gwSha256(String(email).toLowerCase().trim() + ':' + pw);   // what the browser sends for new passwords
+
+/* Stored passwords: PBKDF2-HMAC-SHA256 with a per-account salt over gwPwHash (slow on purpose).
+   Format "p2$<iterations>$<saltHex>$<hashHex>". Older accounts hold the bare 64-hex gwPwHash and are upgraded on save or sign-in. */
+const GW_PW_ITER = 10000;
+function gwPbkdf2(keyStr, saltHex, iter) {
+  let k = gwStrBytes(keyStr); if (k.length > 64) k = gwSha256Bytes(k); while (k.length < 64) k.push(0);
+  const ip = k.map(x => x ^ 0x36), op = k.map(x => x ^ 0x5c);
+  const hmac = m => gwSha256Bytes(op.concat(gwSha256Bytes(ip.concat(m))));
+  const salt = []; for (let i = 0; i < saltHex.length; i += 2) salt.push(parseInt(saltHex.substr(i, 2), 16));
+  let u = hmac(salt.concat([0, 0, 0, 1])); const t = u.slice();
+  for (let i = 1; i < iter; i++) { u = hmac(u); for (let j = 0; j < 32; j++) t[j] ^= u[j]; }
+  return gwHex(t);
+}
+function gwSalt() { let s = ''; for (let i = 0; i < 16; i++) s += ('0' + Math.floor(Math.random() * 256).toString(16)).slice(-2); return s; }
+const gwIsLegacy = stored => /^[0-9a-f]{64}$/.test(String(stored || ''));
+function gwStorePw(clientHash) { const salt = gwSalt(); return 'p2$' + GW_PW_ITER + '$' + salt + '$' + gwPbkdf2(clientHash, salt, GW_PW_ITER); }
+function gwCheckPw(stored, clientHash) {
+  stored = String(stored || '');
+  if (gwIsLegacy(stored)) return gwEq(stored, clientHash);
+  const m = stored.split('$'); if (m.length !== 4 || m[0] !== 'p2') return false;
+  return gwEq(m[3], gwPbkdf2(clientHash, m[2], parseInt(m[1], 10) || GW_PW_ITER));
+}
 function gwMakeToken(u, secret, now) {
   const p = gwToHex(JSON.stringify({ u: u.id, r: u.role, e: (now || Date.now()) + GW_TOKEN_DAYS * 864e5 }));
   return p + '.' + gwHmac(secret, p);
@@ -59,12 +81,32 @@ function gwSettings(records, bootUsers) {
 }
 const gwPublicUser = u => ({ id: u.id, name: u.name, email: u.email, role: u.role });
 
-function gwLogin(body, records, bootUsers, secret) {
+/* Sign-in. `limits` is a small store kept by the server (n8n workflow static data) for the
+   wrong-password lock: 5 wrong passwords for one email lock that email for 15 minutes. */
+const GW_MAX_FAILS = 5, GW_LOCK_MIN = 15;
+function gwLogin(body, records, bootUsers, secret, limits, now) {
+  now = now || Date.now();
   const email = String((body || {}).email || '').toLowerCase().trim(), pw = String((body || {}).password || '');
+  const L = limits || {}; const rec = L[email] || { n: 0, until: 0 };
+  if (rec.until > now) {
+    const mins = Math.ceil((rec.until - now) / 60000);
+    return { ok: false, status: 429, error: `Too many wrong passwords. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+  }
   const st = gwSettings(records, bootUsers);
   const u = (st.users || []).find(x => String(x.email || '').toLowerCase() === email);
-  if (!u || !u.pw || !pw || !gwEq(u.pw, gwPwHash(email, pw))) return { ok: false, status: 401, error: 'Email or password is not correct.' };
-  return { ok: true, status: 200, token: gwMakeToken(u, secret), user: gwPublicUser(u) };
+  if (!u || !u.pw || !pw || !gwCheckPw(u.pw, gwPwHash(email, pw))) {
+    if (email) { rec.n = (rec.n || 0) + 1; rec.until = 0; if (rec.n >= GW_MAX_FAILS) { rec.n = 0; rec.until = now + GW_LOCK_MIN * 60000; } L[email] = rec; }
+    return { ok: false, status: 401, error: 'Email or password is not correct.' };
+  }
+  delete L[email];
+  // Upgrade an old-format password to the slow, salted format (settings updatedAt is kept, so nobody's open screen conflicts).
+  let upgrade = null;
+  if (gwIsLegacy(u.pw) && !st._boot) {
+    const st2 = JSON.parse(JSON.stringify(st));
+    st2.users.forEach(x => { if (x.id === u.id) x.pw = gwStorePw(u.pw); });
+    upgrade = st2;
+  }
+  return { ok: true, status: 200, token: gwMakeToken(u, secret), user: gwPublicUser(u), _upgrade: upgrade };
 }
 
 /* Who is calling: token valid AND the account still exists (removed accounts lose access at once). */
@@ -105,7 +147,8 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
       // Keep stored password hashes; a new hash is only sent when a password is set or changed.
       r.users = (r.users || []).map(u => {
         const old = (base.users || []).find(x => x.id === u.id);
-        const pw = u.pw || (old && old.pw) || '';
+        let pw = u.pw || (old && old.pw) || '';
+        if (gwIsLegacy(pw)) pw = gwStorePw(pw);   // new password from the browser, or an old-format one
         return { id: u.id, name: u.name, email: String(u.email || '').trim(), role: u.role === 'mgr' ? 'mgr' : 'staff', pw };
       });
       if (!r.users.some(u => u.id === who.uid && u.role === 'mgr')) return { ok: false, status: 400, error: 'You cannot remove your own manager account.' };
@@ -133,4 +176,4 @@ function gwSplitJson(json) {
   const out = {}; GW_CHUNKS.forEach((k, i) => { out[k] = json.slice(i * GW_CHUNK, (i + 1) * GW_CHUNK); }); return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { gwSha256, gwHmac, gwPwHash, gwMakeToken, gwVerifyToken, gwHeader, gwSettings, gwLogin, gwWho, gwList, gwPrepareSave, gwPublicUser, gwJoinRow, gwSplitJson };
+if (typeof module !== 'undefined' && module.exports) module.exports = { gwSha256, gwHmac, gwPwHash, gwMakeToken, gwVerifyToken, gwHeader, gwSettings, gwLogin, gwWho, gwList, gwPrepareSave, gwPublicUser, gwJoinRow, gwSplitJson, gwStorePw, gwCheckPw, gwIsLegacy, gwPbkdf2 };
