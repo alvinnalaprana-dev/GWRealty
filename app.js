@@ -81,7 +81,7 @@
   const pwHash = async (email, pw) => { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).toLowerCase().trim() + ':' + pw)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); };
   const curUser = () => (S.users || []).find(u => u.id === S.user);
   const rec = id => S.records.find(r => r.id === id);
-  const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed');
+  const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed' && r.status !== 'cancelled');
   // Inventory listing: a villa inventory without a tenant (kind 'inv'). It uses the check-in screens and ends 'closed' when approved.
   const isInv = r => !!r && r.kind === 'inv';
 
@@ -167,7 +167,7 @@
       }
       const server = recs.filter(x => x.id !== '_settings');
       const local = S.records;
-      const keepLocal = (lr, sr) => lr && (lr._dirty || ((lr.status === 'in_draft' || lr.status === 'out_draft') && sr.status !== 'checkin_pending' && sr.status !== 'checkout_pending' && sr.status !== 'closed'));
+      const keepLocal = (lr, sr) => lr && (lr._dirty || ((lr.status === 'in_draft' || lr.status === 'out_draft') && sr.status === lr.status));
       S.records = server.map(sr => { const lr = local.find(x => x.id === sr.id); if (!keepLocal(lr, sr)) return sr; if (!lr._dirty) lr.updatedAt = sr.updatedAt; return lr; })
         .concat(local.filter(lr => !server.some(sr => sr.id === lr.id) && (lr._dirty || lr.status === 'in_draft' || lr.status === 'out_draft')));
       lastPull = Date.now(); save();
@@ -490,6 +490,7 @@
         <div class="row"><input id="newRoom" placeholder="Other room name, e.g. Bedroom 4" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Add</button></div>
         <p class="note">New rooms are saved for this villa and appear again at the next check-in and check-out.</p>
       </div>` : ''}
+      <p style="text-align:center;margin:14px 0 4px"><button class="linkbtn cancelDraft" data-act="cancelDraft" data-r="${r.id}">Cancel this ${isInv(r) ? 'inventory' : phase === 'in' ? 'check-in' : 'check-out'}</button></p>
       <div class="sticky">
         <p class="err" role="alert" id="sendErr" hidden></p>
         <button class="btn block" data-act="send" data-r="${r.id}">Send to manager (${total} photo${total === 1 ? '' : 's'})</button>
@@ -653,14 +654,14 @@
   function statusMgr(r) {
     if (!r) return { chip: chip('', 'Empty'), act: '' };
     switch (r.status) {
-      case 'in_draft': return { chip: chip('', isInv(r) ? 'Staff doing inventory' : 'Staff checking inventory'), act: '' };
+      case 'in_draft': return { chip: chip('', isInv(r) ? 'Staff doing inventory' : 'Staff checking inventory'), act: `<button class="btn ghost sm" data-act="cancelDraft" data-r="${r.id}">Discard</button>` };
       case 'checkin_pending': return { chip: chip('am', isInv(r) ? 'Inventory to review' : 'Check-in to review'), act: `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` };
       case 'occupied': {
         const d = daysUntil(r.checkOut);
         const due = d <= 7 ? ' ' + chip('am', d < 0 ? 'Check-out overdue' : d === 0 ? 'Check-out today' : `Check-out in ${d} days`) : '';
         return { chip: chip('ok', 'Occupied') + due, act: `<a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a>` };
       }
-      case 'out_draft': return { chip: chip('', 'Staff checking check-out'), act: '' };
+      case 'out_draft': return { chip: chip('', 'Staff checking check-out'), act: `<button class="btn ghost sm" data-act="cancelDraft" data-r="${r.id}">Discard</button>` };
       case 'checkout_pending': return { chip: chip('am', 'Check-out to review'), act: `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` };
     }
     return { chip: '', act: '' };
@@ -1207,6 +1208,18 @@ ${isInv(r) ? `
     else if (act === 'startIn' || act === 'startInv') {
       const r = Object.assign({ id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() }, act === 'startInv' ? { kind: 'inv' } : {});
       S.records.push(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
+    }
+    else if (act === 'cancelDraft') {
+      // Two taps. A check-in or inventory draft is cancelled (the villa is empty again); a check-out draft goes back to occupied.
+      // Photos already uploaded stay in Google Drive as evidence.
+      const r = rec(b.dataset.r); if (!r || (r.status !== 'in_draft' && r.status !== 'out_draft')) return;
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to cancel'; return; }
+      const prev = JSON.parse(JSON.stringify(r)), what = isInv(r) ? 'Inventory' : r.status === 'in_draft' ? 'Check-in' : 'Check-out';
+      if (r.status === 'in_draft') r.status = 'cancelled';
+      else { r.status = 'occupied'; r.outItems = null; r.outPhotos = {}; r.outInvDate = ''; }
+      r.cancelledAt = Date.now(); save();
+      toast(`${what} cancelled.`); go(S.role === 'mgr' ? '#/mgr' : '#/staff'); render();
+      pushRecord(r).catch(e2 => { if (e2.status !== 409) { Object.keys(r).forEach(k => delete r[k]); Object.assign(r, prev); save(); render(); } onSaveError(r, e2, 'Not cancelled: saving to the server failed. Check the connection and try again.'); });
     }
     else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/staff/capture/${r.id}`); }
     else if (act === 'retryAi') {

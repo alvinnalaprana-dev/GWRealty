@@ -254,3 +254,4 @@ input.nm.missing{border-color:var(--red);background:var(--red-soft)}
 
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row2 .btn{margin:0}
+.linkbtn.cancelDraft{border:1px solid var(--line2);color:var(--muted);background:transparent;text-transform:none;letter-spacing:0;font-size:13px;padding:6px 12px;min-height:32px}

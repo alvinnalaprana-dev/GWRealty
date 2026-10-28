@@ -136,6 +136,7 @@ function gwList(records, who) {
 
 /* ---------- save: permissions, overwrite protection, settings merge ---------- */
 const GW_STAFF_STATUS = ['in_draft', 'checkin_pending', 'out_draft', 'checkout_pending'];
+const GW_LOCKED_AFTER_CHECKIN = ['inItems', 'inPhotos', 'agreement', 'tenant', 'checkIn', 'checkOut', 'invDate', 'inApprovedAt', 'kind', 'villaId'];
 function gwPrepareSave(record, existing, settings, who, nowIso) {
   const r = JSON.parse(JSON.stringify(record || {}));
   if (!r.id) return { ok: false, status: 400, error: 'record.id is required' };
@@ -161,6 +162,14 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
     }
     r.status = 'settings';
   } else if (who.role !== 'mgr') {
+    // Staff may cancel their own draft: a check-in/inventory draft becomes 'cancelled', a check-out draft goes back to 'occupied'.
+    // The server rebuilds the record from the stored copy, so nothing else can be changed this way.
+    if (existing && existing.status === 'in_draft' && r.status === 'cancelled') {
+      return { ok: true, status: 200, record: Object.assign(JSON.parse(JSON.stringify(existing)), { status: 'cancelled', cancelledAt: r.cancelledAt || Date.now(), updatedAt: nowIso || new Date().toISOString() }) };
+    }
+    if (existing && existing.status === 'out_draft' && r.status === 'occupied') {
+      return { ok: true, status: 200, record: Object.assign(JSON.parse(JSON.stringify(existing)), { status: 'occupied', outItems: null, outPhotos: {}, outInvDate: '', updatedAt: nowIso || new Date().toISOString() }) };
+    }
     if (GW_STAFF_STATUS.indexOf(r.status) < 0) return { ok: false, status: 403, error: 'Only the manager can approve.' };
     // Staff may only edit drafts (or start a check-out on an occupied villa). Once sent, the record belongs to the manager.
     const draft = existing && (existing.status === 'in_draft' || existing.status === 'out_draft');
@@ -168,6 +177,8 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
       return { ok: false, status: 403, error: 'This record has already been sent to the manager.' };
     }
     if (existing) GW_PRIVATE.forEach(k => { if (existing[k] !== undefined) r[k] = existing[k]; else delete r[k]; });
+    // During a check-out, the approved check-in (list, photos, lease details) cannot be changed by staff.
+    if (existing && existing.inApprovedAt) GW_LOCKED_AFTER_CHECKIN.forEach(k => { if (existing[k] !== undefined) r[k] = existing[k]; else delete r[k]; });
     else GW_PRIVATE.forEach(k => delete r[k]);
   }
   r.updatedAt = nowIso || new Date().toISOString();
