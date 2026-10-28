@@ -539,7 +539,8 @@
     const have = new Set(cur.map(i => i.name.trim().toLowerCase()));
     return cur.concat(fresh.filter(i => !have.has(i.name.trim().toLowerCase())));
   }
-  async function runAi(r, phase, room, good) {
+  // strong = use the stronger AI model (Sonnet): for "Try AI again", and automatically once when the normal model fails.
+  async function runAi(r, phase, room, good, strong) {
     r.aiState = r.aiState || {};
     const key = `${r.id}:${phase}:${room}`;
     BUSY.add(key); render(true);
@@ -550,7 +551,7 @@
     try {
       const photosB64 = [];
       for (const pid of good.slice(-4)) { const p = await getPhoto(pid); if (p) photosB64.push(b64(p.data)); }
-      const body = { phase, villa: villa(r.villaId).name, room: roomName(room, 'en'), photos: photosB64 };
+      const body = { phase, villa: villa(r.villaId).name, room: roomName(room, 'en'), photos: photosB64, strong: !!strong };
       const ro = roomObj(room);
       if (phase === 'in' && ro && Array.isArray(ro.cat) && ro.cat.length) body.expected = ro.cat;
       else if (phase === 'in' && CAT[room] && !REAL) body.expected = CAT[room];
@@ -583,6 +584,8 @@
       if (phase === 'in') { r.inItems = r.inItems || {}; r.inItems[room] = r.inItems[room] || []; }
       r.aiState[phase + ':' + room] = 'fail';
       if (e && e.status === 401) { BUSY.delete(key); return; }
+      // The normal model failed (bad or cut-off reply, server error): try once with the stronger model before asking staff.
+      if (!strong && (!e || !e.status || e.status >= 500)) { BUSY.delete(key); return runAi(r, phase, room, good, true); }
       finish('AI could not be reached. Tap "Try AI again", or add the items by hand.');
     }
   }
@@ -1208,7 +1211,7 @@ ${isInv(r) ? `
     else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/staff/capture/${r.id}`); }
     else if (act === 'retryAi') {
       const r = rec(location.hash.split('/')[3]); if (!r) return; const phase = phaseOf(r);
-      goodPhotos((r[phase + 'Photos'] || {})[b.dataset.room]).then(good => { if (good.length) runAi(r, phase, b.dataset.room, good); else toast('Add a bright photo first.'); });
+      goodPhotos((r[phase + 'Photos'] || {})[b.dataset.room]).then(good => { if (good.length) runAi(r, phase, b.dataset.room, good, true); else toast('Add a bright photo first.'); });
     }
     else if (act === 'hideRoom') {
       const v = villa(b.dataset.v); if (!v) return;

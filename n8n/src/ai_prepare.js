@@ -2,11 +2,12 @@
 // { phase: "in"|"out", villa, room, photos: ["<base64 jpeg>", ...],
 //   expected: [["Bed frame",1], ...]            (optional, check-in: villa amenity list for this room)
 //   checkin:  [{id, name, qty, cond}, ...]       (check-out: the approved check-in list for this room) }
-const MODEL = 'claude-haiku-5-5';   // change to 'claude-sonnet-5-5' if Haiku misses too much
 const MAX_PHOTOS = 4;
 
 const MAX_PHOTO_B64 = 8 * 1024 * 1024;   // about 6 MB per photo (the app sends compressed JPEGs well under this)
 const raw = $('Webhook').first().json.body || {};
+// Normal calls use Haiku; "Try AI again" and the automatic retry ask for the stronger model (Sonnet). Only these two are allowed.
+const MODEL = raw.strong === true ? 'claude-sonnet-5-5' : 'claude-haiku-5-5';
 const txt = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f`]/g, ' ').slice(0, n);   // short, single-line text for the prompt
 const b = {
   phase: raw.phase, villa: txt(raw.villa, 80), room: txt(raw.room, 80),

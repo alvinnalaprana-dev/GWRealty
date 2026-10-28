@@ -151,6 +151,24 @@ out['GW-7-Reminder'] = wf('GW Inventory · 7 Check-out reminder (daily)', [
      "credentials": {"gmailOAuth2": {"id": cred_id('gmail'), "name": "GW Gmail"}}}],
     conn([('Every day 08:00', 'Read records'), ('Read records', 'Due in 7 days'), ('Due in 7 days', 'Email manager')]))
 
+# 8. Monthly report (30th; last day in February) — numbers by code, short summary by Claude Opus, emailed to the manager
+mon_read = read_all((220, 0)); mon_read.pop('alwaysOutputData')
+out['GW-8-Monthly-report'] = wf('GW Inventory · 8 Monthly report (30th)', [
+    {"id": nid(), "name": "28th-31st 08:00", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0],
+     "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 8 28-31 * *"}]}}},
+    mon_read, code('Monthly numbers', src('monthly_data.js'), (440, 0)),
+    {"id": nid(), "name": "Claude Opus summary", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [660, 0], "onError": "continueRegularOutput",
+     "parameters": {"method": "POST", "url": "https://api.anthropic.com/v1/messages", "authentication": "genericCredentialType",
+                    "genericAuthType": "httpHeaderAuth", "sendHeaders": True,
+                    "headerParameters": {"parameters": [{"name": "anthropic-version", "value": "2023-06-01"}]},
+                    "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.body) }}", "options": {"timeout": 120000}},
+     "credentials": {"httpHeaderAuth": {"id": cred_id('anthropic'), "name": "GW Anthropic API key"}}},
+    code('Build email', src('monthly_email.js'), (880, 0)),
+    {"id": nid(), "name": "Email manager", "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": [1100, 0],
+     "parameters": {"sendTo": "manno.realtor@gmail.com", "subject": "={{ $json.subject }}", "emailType": "html", "message": "={{ $json.html }}", "options": {"appendAttribution": False}},
+     "credentials": {"gmailOAuth2": {"id": cred_id('gmail'), "name": "GW Gmail"}}}],
+    conn([('28th-31st 08:00', 'Read records'), ('Read records', 'Monthly numbers'), ('Monthly numbers', 'Claude Opus summary'), ('Claude Opus summary', 'Build email'), ('Build email', 'Email manager')]))
+
 os.makedirs(OUT, exist_ok=True)
 for k, v in out.items():
     json.dump(v, open(os.path.join(OUT, k + '.json'), 'w'), indent=2, ensure_ascii=False)

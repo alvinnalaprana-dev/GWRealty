@@ -2,7 +2,7 @@
   "name": "GW Inventory · 0 Login",
   "nodes": [
     {
-      "id": "bb0cbdbb-ca47-435a-b141-9db13068d080",
+      "id": "86755c8b-b691-41c6-bed4-068d875dc419",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "68beadc0-5f88-4cd5-8a75-2a17d59f500c",
+      "webhookId": "2f5f589f-7fcd-4e76-a6c2-c103112be366",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-login",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "d1c2126d-982f-4411-99f4-18708c97b668",
+      "id": "bbf3789c-2a6f-47b0-9abb-547de8457a39",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -53,7 +53,7 @@
       "alwaysOutputData": true
     },
     {
-      "id": "2fb205b2-3316-4386-a4fe-a67200986240",
+      "id": "a3f1a808-ec8b-4c46-b842-b94882aa278f",
       "name": "Check login",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,7 +66,7 @@
       }
     },
     {
-      "id": "7c9fc0b4-f54e-4742-b057-afe94c52b557",
+      "id": "4f34ad2e-fdb7-4cd9-a960-60a364b17fb7",
       "name": "Upgrade password?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -83,7 +83,7 @@
           },
           "conditions": [
             {
-              "id": "b582a589-e78f-4a7b-bc56-dd0130d06499",
+              "id": "8b4ce7fc-6845-43dd-a2b5-52a2df45cd30",
               "leftValue": "={{ $json._row ? 1 : 0 }}",
               "rightValue": 1,
               "operator": {
@@ -98,7 +98,7 @@
       }
     },
     {
-      "id": "f72c051f-7fa1-4908-854f-1eeb920337b4",
+      "id": "1f44166d-6f9a-4cdb-b9d9-27ff93bfb295",
       "name": "Save upgraded password",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -301,7 +301,7 @@
       }
     },
     {
-      "id": "187fed8a-8b45-4354-9077-69b27273ed9b",
+      "id": "deb5c5ef-67c8-4e17-8df8-50c5a9f2d843",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

@@ -1,0 +1,207 @@
+{
+  "name": "GW Inventory · 8 Monthly report (30th)",
+  "nodes": [
+    {
+      "id": "0c0301c8-fe56-492c-9402-16940fa077f2",
+      "name": "28th-31st 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 28-31 * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d995cf4d-a871-4709-b591-4ea6efe8aed1",
+      "name": "Read records",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1cNxJUgEy1X6dpenaPSc_0vIBuBLTaCrKYDcTRGHeYN8",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1891781412,
+          "mode": "list",
+          "cachedResultName": "Records"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "GW Google Sheets"
+        }
+      }
+    },
+    {
+      "id": "66514b5b-bc0d-4dec-af28-bd3b908e8c85",
+      "name": "Monthly numbers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Monthly report, step 1: work out every number from the Records sheet (no AI here).\n// Runs on the 28th-31st at 08:00 WITA and continues only on the report day: the 30th, or the last day of a shorter month (February).\n// Set FORCE = true only for a one-off test run.\nconst FORCE = false;\nconst TZ = 'Asia/Makassar';\nconst ymd = d => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);\nconst today = ymd(new Date());                                   // e.g. 2026-10-30\nconst [Y, M, D] = today.split('-').map(Number);\nconst daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();   // m = 1..12\nconst reportDay = (y, m) => Math.min(30, daysIn(y, m));\nif (!FORCE && D !== reportDay(Y, M)) return [];\n\n// Period: the day after last month's report day, up to and including today.\nconst pm = M === 1 ? 12 : M - 1, py = M === 1 ? Y - 1 : Y;\nconst startD = new Date(Date.UTC(py, pm - 1, reportDay(py, pm) + 1));\nconst start = startD.toISOString().slice(0, 10), end = today;\nconst inPeriod = ms => { if (!ms) return false; const d = ymd(new Date(ms)); return d >= start && d <= end; };\nconst fmt = s => { if (!s) return '-'; const d = new Date(String(s).slice(0, 10) + 'T00:00:00Z'); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); };\n\n// Read the records (one record may be split over dataJson..dataJson6).\nconst cols = ['dataJson', 'dataJson2', 'dataJson3', 'dataJson4', 'dataJson5', 'dataJson6'];\nconst recs = [];\nfor (const it of $input.all()) { const t = cols.map(k => it.json[k] || '').join(''); if (!t) continue; try { recs.push(JSON.parse(t)); } catch (e) { /* skip broken row */ } }\nconst st = recs.find(r => r.id === '_settings') || { villas: [] };\nconst villas = st.villas || [];\nconst records = recs.filter(r => r.id !== '_settings');\nconst vName = id => (villas.find(v => v.id === id) || {}).name || id;\nconst DEF_ROOMS = { bed1: 'Bedroom 1', bed2: 'Bedroom 2', bed3: 'Bedroom 3', living: 'Living room', kitchen: 'Kitchen & dining' };\nconst roomName = (vid, rid) => { const v = villas.find(x => x.id === vid) || {}; const r = (v.rooms || []).find(x => x.id === rid); return (r && (r.en || r.name)) || DEF_ROOMS[rid] || rid; };\n\n// Same rule as the app: a change = worse condition than at check-in, or moved to another room.\nconst RANK = { Good: 0, Worn: 1, Damaged: 2 };\nconst hasCost = c => c !== '' && c !== null && c !== undefined && !isNaN(Number(c));\nfunction changes(r) {\n  const out = [];\n  Object.keys(r.outItems || {}).forEach(room => (r.outItems[room] || []).forEach(it => {\n    if (it.unchecked && !it.touched && !it.movedTo) return;\n    const worse = (RANK[it.cond] || 0) > (RANK[it.inCond] || 0);\n    if (!worse && !it.movedTo) return;\n    out.push({ room: roomName(r.villaId, room), item: it.name, result: worse ? it.cond : 'Moved', movedTo: it.movedTo ? roomName(r.villaId, it.movedTo) : '', note: it.note || '', cost: hasCost(it.cost) ? Number(it.cost) : null });\n  }));\n  return out;\n}\n\nconst isInv = r => r.kind === 'inv';\nconst inventories = records.filter(r => isInv(r) && r.status === 'closed' && inPeriod(r.inApprovedAt));\nconst checkIns = records.filter(r => !isInv(r) && r.inApprovedAt && inPeriod(r.inApprovedAt));\nconst checkOuts = records.filter(r => !isInv(r) && r.status === 'closed' && inPeriod(r.outApprovedAt));\nconst coDetail = checkOuts.map(r => { const ch = changes(r); const priced = ch.filter(c => c.cost !== null);\n  return { villa: vName(r.villaId), agreement: r.agreement || '-', checkIn: fmt(r.checkIn), checkOut: fmt(r.checkOut), changes: ch,\n    damaged: ch.filter(c => c.result === 'Damaged').length, worn: ch.filter(c => c.result === 'Worn').length, moved: ch.filter(c => c.result === 'Moved').length,\n    cost: priced.reduce((a, c) => a + c.cost, 0), unpriced: ch.filter(c => c.cost === null && c.result !== 'Moved').length }; });\n\n// The situation today.\nconst occupied = records.filter(r => r.status === 'occupied');\nconst in30 = new Date(Date.parse(today + 'T00:00:00Z') + 30 * 864e5).toISOString().slice(0, 10);\nconst upcoming = occupied.filter(r => r.checkOut && r.checkOut.slice(0, 10) >= today && r.checkOut.slice(0, 10) <= in30).sort((a, b) => a.checkOut.localeCompare(b.checkOut)).map(r => ({ villa: vName(r.villaId), checkOut: fmt(r.checkOut) }));\nconst overdue = occupied.filter(r => r.checkOut && r.checkOut.slice(0, 10) < today).map(r => ({ villa: vName(r.villaId), checkOut: fmt(r.checkOut) }));\nconst waiting = records.filter(r => r.status === 'checkin_pending' || r.status === 'checkout_pending').map(r => ({ villa: vName(r.villaId), what: isInv(r) ? 'Inventory' : r.status === 'checkin_pending' ? 'Check-in' : 'Check-out' }));\nconst stale = records.filter(r => (r.status === 'in_draft' || r.status === 'out_draft') && r.createdAt && Date.now() - r.createdAt > 3 * 864e5).map(r => ({ villa: vName(r.villaId), what: isInv(r) ? 'Inventory' : r.status === 'in_draft' ? 'Check-in' : 'Check-out' }));\nconst withBaseline = new Set(records.filter(r => r.inApprovedAt).map(r => r.villaId));\nconst noInventory = villas.filter(v => !withBaseline.has(v.id)).map(v => v.name);\n\n// Items with problems at two or more check-outs (all time), per villa.\nconst rep = {};\nrecords.filter(r => r.status === 'closed' && !isInv(r)).forEach(r => changes(r).filter(c => c.result !== 'Moved').forEach(c => { const k = vName(r.villaId) + '|' + c.item.toLowerCase(); (rep[k] = rep[k] || { villa: vName(r.villaId), item: c.item, times: 0 }).times++; }));\nconst repeats = Object.values(rep).filter(x => x.times >= 2).sort((a, b) => b.times - a.times);\n\nconst totals = {\n  inventories: inventories.length, checkIns: checkIns.length, checkOuts: checkOuts.length,\n  damaged: coDetail.reduce((a, c) => a + c.damaged, 0), worn: coDetail.reduce((a, c) => a + c.worn, 0), moved: coDetail.reduce((a, c) => a + c.moved, 0),\n  cost: coDetail.reduce((a, c) => a + c.cost, 0), unpriced: coDetail.reduce((a, c) => a + c.unpriced, 0),\n  villas: villas.length, occupied: occupied.length,\n};\nconst data = { period: `${fmt(start)} – ${fmt(end)}`, start, end, totals,\n  inventories: inventories.map(r => ({ villa: vName(r.villaId), date: fmt(r.invDate) })),\n  checkIns: checkIns.map(r => ({ villa: vName(r.villaId), agreement: r.agreement || '-', checkIn: fmt(r.checkIn), checkOut: fmt(r.checkOut) })),\n  checkOuts: coDetail, upcoming, overdue, waiting, stale, noInventory, repeats };\n\n// Ask the AI only for the commentary; every number it may use is in `data`. No tenant names or contact details are sent.\nconst prompt = `You write the monthly villa inventory summary for GW Realty, a villa rental agency in Bali. The reader is the manager.\nUse ONLY the facts in the JSON below. Do not invent, estimate or recalculate any number; quote numbers exactly as given. If something is not in the data, do not mention it.\nWrite plain English, at most 180 words, as 3 to 5 short paragraphs or bullet points:\n1. One-sentence overview of the period.\n2. What stood out at check-outs (damage, repeated problems, costs not yet entered).\n3. What needs the manager's attention now (overdue check-outs, records waiting for approval, drafts left open, villas with no inventory yet, check-outs coming up).\nIf the period had no activity, say so in one sentence and only list what needs attention.\nNo greeting, no sign-off, no headings.\n\nDATA:\n${JSON.stringify(data)}`;\nreturn [{ json: { data, body: { model: 'claude-opus-5-5', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] } } }];\n"
+      }
+    },
+    {
+      "id": "d1c1421f-2b7a-4f86-b1a9-f43f364aa362",
+      "name": "Claude Opus summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GW Anthropic API key"
+        }
+      }
+    },
+    {
+      "id": "f727d005-943c-4c93-a42c-efa8db209430",
+      "name": "Build email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Monthly report, step 2: build the email. Numbers come from step 1; the AI only wrote the summary paragraph(s).\n// If the AI step failed, the email is still sent, with the numbers and a short note.\nconst data = $('Monthly numbers').first().json.data;\nconst ai = $input.first().json || {};\nlet summary = (ai.content || []).filter(c => c.type === 'text').map(c => c.text).join('\\n').trim();\nconst esc = s => String(s == null ? '' : s).replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');\nconst T = data.totals;\nconst para = t => t.split(/\\n+/).filter(Boolean).map(l => /^[-*•]\\s/.test(l) ? `<li>${esc(l.replace(/^[-*•]\\s+/, ''))}</li>` : `<p style=\"margin:0 0 10px\">${esc(l)}</p>`).join('').replace(/(<li>.*?<\\/li>)+/gs, m => `<ul style=\"margin:0 0 10px;padding-left:18px\">${m}</ul>`);\nconst table = (head, rows) => rows.length ? `<table cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;font-size:13px;margin:4px 0 16px\">\n  <tr>${head.map(h => `<th align=\"left\" style=\"border-bottom:2px solid #222;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#666\">${esc(h)}</th>`).join('')}</tr>\n  ${rows.map(r => `<tr>${r.map(c => `<td style=\"border-bottom:1px solid #e3e3e3;vertical-align:top\">${c}</td>`).join('')}</tr>`).join('')}</table>` : '<p style=\"color:#666;margin:4px 0 16px\">None.</p>';\nconst h2 = t => `<h3 style=\"font-size:15px;margin:22px 0 6px;color:#A61011\">${esc(t)}</h3>`;\nconst stat = (n, l) => `<td align=\"center\" style=\"padding:10px;background:#F5F5F5;border-radius:6px\"><div style=\"font-size:22px;font-weight:700;color:#222\">${n}</div><div style=\"font-size:11px;color:#666\">${esc(l)}</div></td>`;\n\nconst coRows = data.checkOuts.map(c => [\n  `<b>${esc(c.villa)}</b><br><span style=\"color:#666\">${esc(c.agreement)} · ${esc(c.checkIn)} – ${esc(c.checkOut)}</span>`,\n  c.changes.length ? c.changes.map(x => `${esc(x.room)}: ${esc(x.item)} — <b>${esc(x.result)}</b>${x.movedTo ? ' to ' + esc(x.movedTo) : ''}${x.note ? ` <span style=\"color:#666\">(${esc(x.note)})</span>` : ''}${x.cost !== null ? ' · ' + rp(x.cost) : ''}`).join('<br>') : 'No changes',\n  c.cost ? rp(c.cost) : '-',\n]);\nconst html = `<div style=\"font-family:Arial,Helvetica,sans-serif;color:#333;max-width:680px\">\n  <div style=\"background:#A61011;color:#fff;padding:16px 20px;border-radius:6px 6px 0 0\"><div style=\"font-size:11px;letter-spacing:.15em;text-transform:uppercase;opacity:.85\">GW Realty · Villa Inventory</div><div style=\"font-size:20px;font-weight:700;margin-top:4px\">Monthly report</div><div style=\"font-size:13px;opacity:.9;margin-top:2px\">${esc(data.period)}</div></div>\n  <div style=\"padding:16px 20px;border:1px solid #e3e3e3;border-top:0;border-radius:0 0 6px 6px\">\n  <table cellspacing=\"6\" style=\"width:100%;margin:0 -6px 8px\"><tr>${stat(T.inventories, 'Inventories')}${stat(T.checkIns, 'Check-ins')}${stat(T.checkOuts, 'Check-outs')}${stat(T.damaged, 'Items damaged')}${stat(rp(T.cost), 'Costs entered')}</tr></table>\n  ${h2('Summary')}\n  ${summary ? para(summary) + '<p style=\"font-size:11px;color:#888;margin:0\">Summary written by AI from the figures in this email; the tables below are the source.</p>' : '<p style=\"color:#666\">The AI summary could not be generated this month; all figures are below.</p>'}\n  ${h2('Check-outs this period')}${table(['Villa', 'Changes', 'Cost'], coRows)}\n  ${T.unpriced ? `<p style=\"margin:-8px 0 16px;color:#9A5A08\">${T.unpriced} worn or damaged item${T.unpriced === 1 ? '' : 's'} without a cost yet. Costs can still be added on the check-out page.</p>` : ''}\n  ${h2('Check-ins this period')}${table(['Villa', 'Agreement', 'Check-in', 'Check-out'], data.checkIns.map(c => [esc(c.villa), esc(c.agreement), esc(c.checkIn), esc(c.checkOut)]))}\n  ${h2('Inventories this period')}${table(['Villa', 'Inventory date'], data.inventories.map(c => [esc(c.villa), esc(c.date)]))}\n  ${h2('Needs attention')}\n  ${table(['What', 'Villa', 'Detail'], [].concat(\n    data.overdue.map(x => ['<b style=\"color:#B3261E\">Check-out overdue</b>', esc(x.villa), esc(x.checkOut)]),\n    data.waiting.map(x => ['Waiting for your approval', esc(x.villa), esc(x.what)]),\n    data.stale.map(x => ['Draft open for 3+ days', esc(x.villa), esc(x.what)]),\n    data.noInventory.map(v => ['No inventory yet', esc(v), '']),\n    data.upcoming.map(x => ['Check-out in the next 30 days', esc(x.villa), esc(x.checkOut)])))}\n  ${data.repeats.length ? h2('Repeated problems (all check-outs so far)') + table(['Villa', 'Item', 'Check-outs with a problem'], data.repeats.map(x => [esc(x.villa), esc(x.item), String(x.times)])) : ''}\n  <p style=\"font-size:12px;color:#888;margin-top:20px\">${T.occupied} of ${T.villas} villas occupied today. Sent automatically on the 30th of each month (last day in February).</p>\n  </div></div>`;\nreturn [{ json: { subject: `GW Realty villa inventory · monthly report · ${data.period}`, html } }];\n"
+      }
+    },
+    {
+      "id": "136d0889-b847-4387-b38c-abba1fc188c6",
+      "name": "Email manager",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "sendTo": "manno.realtor@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "GW Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "28th-31st 08:00": {
+      "main": [
+        [
+          {
+            "node": "Read records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read records": {
+      "main": [
+        [
+          {
+            "node": "Monthly numbers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monthly numbers": {
+      "main": [
+        [
+          {
+            "node": "Claude Opus summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Opus summary": {
+      "main": [
+        [
+          {
+            "node": "Build email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build email": {
+      "main": [
+        [
+          {
+            "node": "Email manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Makassar"
+  },
+  "pinData": {}
+}
