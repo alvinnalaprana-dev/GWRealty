@@ -2,7 +2,7 @@
   "name": "GW Inventory · 6 Save PDF",
   "nodes": [
     {
-      "id": "225153f6-7eb5-4dcd-b6a8-925f389ccbb8",
+      "id": "bda2c36f-5ecf-493a-9cc5-ca279783b9c9",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "a2b8f3a5-6afb-44f4-960f-e429cabc522f",
+      "webhookId": "28658e1d-6de8-4aaa-a8ae-591331f3af70",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-pdf",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "33d98d63-0225-4b09-9418-f9fc998558f8",
+      "id": "3209b1cf-a3b8-4be3-9d90-1ed18babb832",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -53,7 +53,7 @@
       "alwaysOutputData": true
     },
     {
-      "id": "e31e97c5-0a6f-4cd2-bd72-174c6d4caad8",
+      "id": "0d71d6d7-be80-4fbc-abd5-a869837c3c69",
       "name": "PDF to file",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,7 +66,7 @@
       }
     },
     {
-      "id": "a07e7cb6-6f5e-4f06-ba74-8a649919902f",
+      "id": "5d3d8cde-c599-41e6-8be3-00e4c76e0006",
       "name": "Allowed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -83,7 +83,7 @@
           },
           "conditions": [
             {
-              "id": "a9e538de-07c9-4380-a806-de4ca04e87f5",
+              "id": "0b5cfe66-9d81-401b-8ce4-5018837062cc",
               "leftValue": "={{ $json.ok === false ? 0 : 1 }}",
               "rightValue": 1,
               "operator": {
@@ -98,7 +98,7 @@
       }
     },
     {
-      "id": "b89db801-8127-4118-915d-87e8c3e6e829",
+      "id": "057b4510-df6a-47a8-a0e7-63a8d22aa60d",
       "name": "Upload PDF",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -129,7 +129,7 @@
       }
     },
     {
-      "id": "420c6347-3540-48d4-9873-39ab6d55fd5e",
+      "id": "1597f84c-cada-4593-b85d-8888ebd35b39",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -144,7 +144,7 @@
       }
     },
     {
-      "id": "96c709e2-d61e-4dd6-8114-86e6e78ed277",
+      "id": "83ced540-ab71-47a9-9d02-4aaeef766b30",
       "name": "Refuse",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

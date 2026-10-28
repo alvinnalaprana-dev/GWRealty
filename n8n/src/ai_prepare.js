@@ -52,4 +52,4 @@ Return: {"quality":"ok"|"retake","quality_note":"","items":[{"id":"","qty":1,"co
 const content = photos.map((data, i) => ({ type: 'image', source: { type: 'base64', media_type: media[i], data } }));
 content.push({ type: 'text', text: task });
 
-return [{ json: { ok: true, phase, body: { model: MODEL, max_tokens: 3000, system: rules, messages: [{ role: 'user', content }] } } }];
+return [{ json: { ok: true, phase, body: { model: MODEL, max_tokens: 6000, system: rules, messages: [{ role: 'user', content }] } } }];
