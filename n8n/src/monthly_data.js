@@ -9,11 +9,15 @@ const [Y, M, D] = today.split('-').map(Number);
 const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();   // m = 1..12
 const reportDay = (y, m) => Math.min(30, daysIn(y, m));
 if (!FORCE && D !== reportDay(Y, M)) return [];
+// First report: 30 Nov 2026, covering everything since 1 Oct 2026 (the October report was skipped on purpose).
+const FIRST_REPORT = '2026-11-30', LAUNCH = '2026-10-01';
+if (!FORCE && today < FIRST_REPORT) return [];
 
 // Period: the day after last month's report day, up to and including today.
 const pm = M === 1 ? 12 : M - 1, py = M === 1 ? Y - 1 : Y;
 const startD = new Date(Date.UTC(py, pm - 1, reportDay(py, pm) + 1));
-const start = startD.toISOString().slice(0, 10), end = today;
+let start = startD.toISOString().slice(0, 10); const end = today;
+if (start < '2026-11-01') start = LAUNCH;
 const inPeriod = ms => { if (!ms) return false; const d = ymd(new Date(ms)); return d >= start && d <= end; };
 const fmt = s => { if (!s) return '-'; const d = new Date(String(s).slice(0, 10) + 'T00:00:00Z'); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); };
 

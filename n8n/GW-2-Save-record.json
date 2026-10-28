@@ -2,7 +2,7 @@
   "name": "GW Inventory · 2 Save record + photos",
   "nodes": [
     {
-      "id": "4a817515-2a92-4aad-ba4c-620245e9bb96",
+      "id": "fa721f05-f147-4a8c-a2a8-14f48b4ceb5d",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "7e90ea26-554b-4728-8827-df554c91e84f",
+      "webhookId": "d45667be-42cc-41ce-8e96-1eeab2e0cdde",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-save-record",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "4b15ac2f-314a-4a00-9e22-13b7ab1035bd",
+      "id": "0f263525-f332-4230-b655-ad633f02e86e",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -53,7 +53,7 @@
       "alwaysOutputData": true
     },
     {
-      "id": "0c831d54-c4ac-4a9e-a30b-b252cfdf6661",
+      "id": "9aa78018-51df-4a28-9071-865b357db984",
       "name": "Check and prepare",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,7 +66,7 @@
       }
     },
     {
-      "id": "a1419589-0b4b-4fd6-baa5-e698c75d3ddb",
+      "id": "6751bd3c-cb39-4561-adda-36c04652b44f",
       "name": "Allowed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -83,7 +83,7 @@
           },
           "conditions": [
             {
-              "id": "dd1c5ad5-54f6-46e5-82ad-d13af6176b9d",
+              "id": "6e0d1460-4a35-4a73-9f94-3274dcb7c593",
               "leftValue": "={{ $json.ok === false ? 0 : 1 }}",
               "rightValue": 1,
               "operator": {
@@ -98,7 +98,7 @@
       }
     },
     {
-      "id": "e8e12a89-12d2-483b-b8b0-edeea84c1fcc",
+      "id": "36357be4-7bcb-4c67-adb9-148e3bb05c48",
       "name": "Has photos?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -115,7 +115,7 @@
           },
           "conditions": [
             {
-              "id": "1d797a12-fda9-4a97-aa8b-cdd3c0997ff4",
+              "id": "271d3e8a-d040-4c42-b7d7-1813e6b0861d",
               "leftValue": "={{ $json.none === true ? 0 : 1 }}",
               "rightValue": 1,
               "operator": {
@@ -130,7 +130,7 @@
       }
     },
     {
-      "id": "fe9b5ec3-212c-4944-baf1-42446344d61a",
+      "id": "e7ff4d4b-6e47-4d79-9e1e-bd0af58bd8ad",
       "name": "Upload photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -161,7 +161,7 @@
       }
     },
     {
-      "id": "d5ceff51-0ae2-47ef-bd24-0ee14e7e2af3",
+      "id": "e5bd8e07-1518-41d3-8eab-091c9b24305d",
       "name": "Build row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -174,7 +174,7 @@
       }
     },
     {
-      "id": "70f7439d-d47b-4783-a0b1-6906a0feceb6",
+      "id": "975ff946-a218-4240-8a9d-b93e7a7feae4",
       "name": "Upsert record",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -377,7 +377,7 @@
       }
     },
     {
-      "id": "17b7e68d-7754-4327-9624-e2ad064c3efa",
+      "id": "292d29a7-8ac1-4cd1-86e4-557a2ab733e0",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -392,7 +392,7 @@
       }
     },
     {
-      "id": "e2dfc449-5cbf-43cf-b1f0-8440734b259a",
+      "id": "988c6aff-f645-47e7-83ac-7778ec6a299b",
       "name": "Refuse",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

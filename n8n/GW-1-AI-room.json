@@ -2,7 +2,7 @@
   "name": "GW Inventory · 1 AI per room",
   "nodes": [
     {
-      "id": "e368bd26-0036-4d8f-9556-d1e86450fb28",
+      "id": "682fe840-c945-4e10-906d-2a2aed93c564",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "0cb87c3d-97d1-4d58-b448-2d42cb230120",
+      "webhookId": "6a6f4ffd-474f-4927-b919-ace0121b57ae",
       "parameters": {
         "httpMethod": "POST",
         "path": "gw-ai-room",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "1b3571c4-61f5-43f0-91db-bedd67c35b88",
+      "id": "83145326-7bcb-4992-8a7d-5d4b871b0e87",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -53,7 +53,7 @@
       "alwaysOutputData": true
     },
     {
-      "id": "175b6b5f-8c03-4196-a8a8-aaa751060a5b",
+      "id": "98246f0e-93c8-46dc-a176-76ee1acc3a8c",
       "name": "Prepare request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,7 +66,7 @@
       }
     },
     {
-      "id": "a5ea5973-3a35-42f2-ba0b-a485db2ade34",
+      "id": "b5bab120-3a30-42c9-a72e-6581a4cc9eee",
       "name": "Allowed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -83,7 +83,7 @@
           },
           "conditions": [
             {
-              "id": "a1758e32-2a4c-499b-a0c3-3cd199ccb8f9",
+              "id": "20ddb88d-d900-4dca-98d7-32f3ffab6211",
               "leftValue": "={{ $json.ok === false ? 0 : 1 }}",
               "rightValue": 1,
               "operator": {
@@ -98,7 +98,7 @@
       }
     },
     {
-      "id": "69961ab8-e8e8-47ab-ac15-93758c32cfac",
+      "id": "d4094ce1-a6be-40b6-99b5-88004ff46f94",
       "name": "Claude API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -135,7 +135,7 @@
       }
     },
     {
-      "id": "c9c60ea4-4af8-4417-bb6c-b5dfe95481f5",
+      "id": "807ca097-450a-4c28-9a25-8ce12a2a6515",
       "name": "Parse reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -148,7 +148,7 @@
       }
     },
     {
-      "id": "a142fc17-2582-4f38-a469-5c2b335bc399",
+      "id": "ea32a8b7-1fa1-4023-b6f1-2e1926f87b77",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -163,7 +163,7 @@
       }
     },
     {
-      "id": "4fd85040-012c-4d3b-8d71-70f2467c27de",
+      "id": "7e65f9d9-54ab-4edf-9f35-2e86510b0426",
       "name": "Refuse",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,

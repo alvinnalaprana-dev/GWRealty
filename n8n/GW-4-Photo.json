@@ -2,7 +2,7 @@
   "name": "GW Inventory · 4 Photo",
   "nodes": [
     {
-      "id": "e496710a-569e-480f-a4d0-37e52d9816e2",
+      "id": "1db7eb1b-25db-4c66-8e51-9627016b5c58",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -10,7 +10,7 @@
         0,
         0
       ],
-      "webhookId": "5dc8adaa-3e7e-4784-b65a-e9343a9c3f8c",
+      "webhookId": "0309dc7e-e8b6-4a70-bc69-81651a27e3cd",
       "parameters": {
         "httpMethod": "GET",
         "path": "gw-photo",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "b5a9c757-bd14-470c-942e-b6ea4190a0e0",
+      "id": "20cbd47d-0f46-442d-aa43-5ea278cc9dbb",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -53,7 +53,7 @@
       "alwaysOutputData": true
     },
     {
-      "id": "5fb63fdf-2b0c-4dc3-96ff-30a5b96ccf02",
+      "id": "1f1e6e41-221b-428e-8f6a-26f7cb5f41e0",
       "name": "Check photo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,7 +66,7 @@
       }
     },
     {
-      "id": "28f96634-c3de-425a-8c10-94ab8aee017a",
+      "id": "351a5ab4-fee7-4197-aa40-d2df7c2aca0a",
       "name": "Allowed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -83,7 +83,7 @@
           },
           "conditions": [
             {
-              "id": "b5c7dcd5-c550-4327-9084-f752d5e1dc57",
+              "id": "12337c43-cf3a-45c1-bc0f-e5d04fbcc0ea",
               "leftValue": "={{ $json.ok === false ? 0 : 1 }}",
               "rightValue": 1,
               "operator": {
@@ -98,7 +98,7 @@
       }
     },
     {
-      "id": "e99e184b-a251-4d34-a106-92a5bdfddd15",
+      "id": "e98f86c1-d108-44c5-ae57-598d5a29c293",
       "name": "Download photo",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -123,7 +123,7 @@
       }
     },
     {
-      "id": "9b2d045b-ef4c-43a5-bc2c-ed1f2ada1049",
+      "id": "e1ea50a0-45a9-4f17-b6dd-53890f75c56e",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -146,7 +146,7 @@
       }
     },
     {
-      "id": "505fe408-dfdb-46f9-be32-b20b794b383f",
+      "id": "15d0bd18-d444-4948-89d6-f261acdddfb0",
       "name": "Refuse",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
