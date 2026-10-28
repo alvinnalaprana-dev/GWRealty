@@ -251,3 +251,6 @@ input.nm.missing{border-color:var(--red);background:var(--red-soft)}
 .pwwrap input{width:100%;padding-right:44px}
 .eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:none;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
 .eye.on{color:var(--red)}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row2 .btn{margin:0}

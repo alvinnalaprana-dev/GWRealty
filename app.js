@@ -82,6 +82,8 @@
   const curUser = () => (S.users || []).find(u => u.id === S.user);
   const rec = id => S.records.find(r => r.id === id);
   const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed');
+  // Inventory listing: a villa inventory without a tenant (kind 'inv'). It uses the check-in screens and ends 'closed' when approved.
+  const isInv = r => !!r && r.kind === 'inv';
 
   /* ---------- n8n connection (live mode) ---------- */
   const API = window.GW_API || {};
@@ -377,9 +379,9 @@
     const cards = S.villas.map(v => {
       const r = activeRec(v.id);
       let status, info = '', btn = '';
-      if (!r) { status = chip('', 'Empty'); info = 'Ready for check-in'; btn = `<button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button>`; }
-      else if (r.status === 'in_draft') { status = chip('am', 'Check-in photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-in</a>`; }
-      else if (r.status === 'checkin_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-in photos sent'; }
+      if (!r) { status = chip('', 'Empty'); info = 'Ready for inventory or check-in'; btn = `<div class="row2"><button class="btn block ghost" data-act="startInv" data-v="${v.id}">Start inventory</button><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`; }
+      else if (r.status === 'in_draft') { const w = isInv(r) ? 'inventory' : 'check-in'; status = chip('am', `${isInv(r) ? 'Inventory' : 'Check-in'} photos not sent yet`); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue ${w}</a>`; }
+      else if (r.status === 'checkin_pending') { status = chip('am', 'Waiting for manager approval'); info = isInv(r) ? 'Inventory photos sent' : 'Check-in photos sent'; }
       else if (r.status === 'occupied') {
         const d = daysUntil(r.checkOut);
         status = chip('ok', 'Occupied');
@@ -393,7 +395,7 @@
     }).join('');
     app.innerHTML = `<div class="page narrow">
       <div class="head"><div><p class="eyebrow">Hello, ${esc((curUser() || {}).name || '')}</p><h1>Villas</h1></div></div>
-      <p class="sub">Choose a villa for check-in or check-out. Just take photos; the item list is made automatically.</p>
+      <p class="sub">Choose a villa for an inventory, check-in or check-out. Just take photos; the item list is made automatically.</p>
       <div class="vlist">${cards}</div>
       ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data is shared with the manager.' : 'Demo: data stays in this browser.'}</p>`}
     </div>`;
@@ -475,9 +477,9 @@
     const dKey = phase === 'in' ? 'invDate' : 'outInvDate';
     app.innerHTML = `<div class="page narrow">
       <a href="${home}">← Back</a>
-      <div class="head"><div><p class="eyebrow">${phase === 'in' ? 'Check-in inventory' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
+      <div class="head"><div><p class="eyebrow">${isInv(r) ? 'Inventory' : phase === 'in' ? 'Check-in inventory' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
       <div class="card"><div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="${dKey}" value="${esc(r[dKey] || '')}"></div>
-        <p class="note">${phase === 'in' ? 'Can differ from the tenant\'s check-in date.' : 'The date of the check-out inspection.'}</p></div>
+        <p class="note">${isInv(r) ? 'The date of this inventory.' : phase === 'in' ? 'Can differ from the tenant\'s check-in date.' : 'The date of the check-out inspection.'}</p></div>
       <p class="sub">Photograph every room. The AI lists the items in each room; check and correct the list before sending it to the manager.</p>
       ${phase === 'out' ? `<div class="banner">Take the photos from the same angles as the check-in photos.</div>` : ''}
       <p class="note" id="busy" aria-live="polite" hidden></p>
@@ -648,8 +650,8 @@
   function statusMgr(r) {
     if (!r) return { chip: chip('', 'Empty'), act: '' };
     switch (r.status) {
-      case 'in_draft': return { chip: chip('', 'Staff checking inventory'), act: '' };
-      case 'checkin_pending': return { chip: chip('am', 'Check-in to review'), act: `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` };
+      case 'in_draft': return { chip: chip('', isInv(r) ? 'Staff doing inventory' : 'Staff checking inventory'), act: '' };
+      case 'checkin_pending': return { chip: chip('am', isInv(r) ? 'Inventory to review' : 'Check-in to review'), act: `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` };
       case 'occupied': {
         const d = daysUntil(r.checkOut);
         const due = d <= 7 ? ' ' + chip('am', d < 0 ? 'Check-out overdue' : d === 0 ? 'Check-out today' : `Check-out in ${d} days`) : '';
@@ -679,7 +681,12 @@
       const rs = remindersFor(r).map(x => `${fmt(x.d)} (7 days before${x.sent ? (REAL ? ', date passed' : ', simulated') : ''})`).join(' · ');
       return `<div class="tg"><b>⏰ ${esc(villa(r.villaId).name)}</b>Check-out ${fmt(r.checkOut)}${d >= 0 ? ` · in ${d} day${d === 1 ? '' : 's'}` : ' · overdue'}<br><small>Email to manager: ${rs}</small></div>`;
     }).join('') : '<p class="note">No upcoming check-outs.</p>';
-    const closed = S.records.filter(r => r.status === 'closed').sort((a, b) => (b.outApprovedAt || 0) - (a.outApprovedAt || 0));
+    const closed = S.records.filter(r => r.status === 'closed' && !isInv(r)).sort((a, b) => (b.outApprovedAt || 0) - (a.outApprovedAt || 0));
+    const invs = S.records.filter(r => r.status === 'closed' && isInv(r)).sort((a, b) => (b.inApprovedAt || 0) - (a.inApprovedAt || 0));
+    const invHist = invs.length ? `<div class="tbl"><table class="vt"><tr><th>Villa</th><th>Inventory date</th><th>Items</th><th></th></tr>
+      ${invs.map(r => `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td class="num">${fmt(r.invDate)}</td><td>${plural(Object.values(r.inItems || {}).reduce((a, l) => a + l.length, 0), 'item')}</td>
+      <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Inventory PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`).join('')}
+      </table></div>` : '<p class="note">Approved inventories will appear here.</p>';
     const hist = closed.length ? `<div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Changes</th><th></th></tr>
       ${closed.map(r => { const c = changes(r).length; return `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td>${esc(r.tenant || '—')}</td><td class="num">${fmt(r.checkIn)}</td><td class="num">${fmt(r.checkOut)}</td><td>${c ? chip('am', `${c} change${c === 1 ? '' : 's'}`) : chip('ok', 'None')}</td>
       <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Check-in PDF</button><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="out">Check-out PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`; }).join('')}
@@ -691,6 +698,7 @@
         <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'The server emails the manager at 08:00 WITA, 7 days before each check-out. Check the inbox to confirm delivery.' : 'In the live system an email goes to the manager 7 days before each check-out.'}</p></div>
       </div>
       <div class="card"><h3>Completed</h3>${hist}</div>
+      <div class="card"><h3>Inventories</h3>${invHist}</div>
       ${REAL ? '' : `<div class="row" style="justify-content:space-between">
         <p class="note">${LIVE ? 'Demo: data is shared with staff phones. Reset clears it for everyone and starts again with the sample villas.' : 'Demo: data stays in this browser. Reset to start again with the sample villas.'}</p>
         <button class="btn danger sm" data-act="reset">Reset demo</button>
@@ -769,7 +777,7 @@
     const r = rec(id);
     if (!r) { go('#/mgr'); return; }
     if (r.status === 'in_draft' || r.status === 'out_draft') { toast('Staff are still checking this villa.'); go('#/mgr'); return; }
-    if (r.status === 'checkin_pending' || r.status === 'occupied') viewCheckIn(r);
+    if (r.status === 'checkin_pending' || r.status === 'occupied' || isInv(r)) viewCheckIn(r);
     else viewCheckOut(r);
   }
 
@@ -806,9 +814,12 @@
     const rem = remindersFor(r).map(x => `email on ${fmt(x.d)} (7 days before${x.sent ? (REAL ? ', date passed' : ', simulated') : ''})`).join(' · ');
     app.innerHTML = `<div class="page">
       <a href="#/mgr">← Villas</a>
-      <div class="head"><div><p class="eyebrow">${edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
+      <div class="head"><div><p class="eyebrow">${isInv(r) ? (edit ? 'Inventory review' : 'Inventory · approved') : edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <div class="card"><div class="form">
         <div class="fld"><label for="f-villa">Villa</label><input id="f-villa" value="${esc(v.name)}" readonly></div>
+${isInv(r) ? `
+        <div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="invDate" value="${esc(r.invDate)}" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-notes">Notes <span class="opt">optional</span></label><input id="f-notes" data-f="notes" value="${esc(r.notes)}" placeholder="e.g. reason for the inventory" ${edit ? '' : 'readonly'}></div>` : `
         <div class="fld"><label for="f-ag">Agreement code</label><input id="f-ag" data-f="agreement" value="${esc(r.agreement)}" placeholder="e.g. GWR-AG-2026-031" autocomplete="off" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-tenant">Tenant name <span class="opt">optional</span></label><input id="f-tenant" data-f="tenant" value="${esc(r.tenant)}" placeholder="Tenant name" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-phone">Phone <span class="opt">optional</span></label><input id="f-phone" data-f="phone" value="${esc(r.phone)}" placeholder="+62…" ${edit ? '' : 'readonly'}></div>
@@ -817,18 +828,18 @@
         <div class="fld"><label for="f-notes">Notes <span class="opt">optional</span></label><input id="f-notes" data-f="notes" value="${esc(r.notes)}" placeholder="e.g. deposit amount, agent" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="invDate" value="${esc(r.invDate)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-in">Check-in date</label><input id="f-in" type="date" data-f="checkIn" value="${esc(r.checkIn)}" ${edit ? '' : 'readonly'}></div>
-        <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>
+        <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>`}
       </div></div>
-      ${edit ? `<p class="note">Type the agreement code exactly as it is on the signed agreement.</p>` : ''}
+      ${edit && !isInv(r) ? `<p class="note">Type the agreement code exactly as it is on the signed agreement.</p>` : ''}
       ${edit ? `<div class="banner ai"><b>${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'}, listed by AI from ${nPh} photo${nPh === 1 ? '' : 's'} and checked by staff.</b> Correct anything that is wrong, then approve. Items marked <span class="warnico">⚠</span> are small items.</div>` : ''}
       ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}. Every room needs a photo; ask staff to add them before approving.</div>` : ''}
       ${edit ? '<p class="note">Items with quantity 0 are removed when you approve.</p>' : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
       ${blocks}
       <div class="actions">
-        <div>${edit ? '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" role="alert" id="apErr" hidden></p></div>
+        <div>${edit ? (isInv(r) ? '<p class="note">Check the list and the inventory date, then approve. The villa stays empty.</p>' : '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>') : isInv(r) ? '<p class="note">Inventory approved.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" role="alert" id="apErr" hidden></p></div>
         <div class="row">
-          ${edit ? `<button class="btn" data-act="approveIn" data-r="${r.id}">✓ Approve check-in</button>` : ''}
+          ${edit ? `<button class="btn" data-act="approveIn" data-r="${r.id}">✓ Approve ${isInv(r) ? 'inventory' : 'check-in'}</button>` : ''}
           <button class="btn ${edit ? 'ghost' : ''}" data-act="pdf" data-r="${r.id}" data-ph="in" ${edit ? 'disabled title="Available after approval"' : ''}>📄 Generate PDF</button>
         </div>
       </div>
@@ -899,8 +910,9 @@
       const doc = new jsPDF({ unit: 'mm', format: 'a4' });
       const v = villa(r.villaId);
       const W = 210, M = 14, BOTTOM = 282;
-      const repNo = `${r.agreement || 'GWR-' + r.id.slice(0, 6).toUpperCase()}-${phase === 'in' ? 'IN' : 'OUT'}`;
-      const title = phase === 'in' ? 'Check-in Report' : 'Check-out Report';
+      const inv = isInv(r);
+      const repNo = `${r.agreement || 'GWR-' + r.id.slice(0, 6).toUpperCase()}-${inv ? 'INV' : phase === 'in' ? 'IN' : 'OUT'}`;
+      const title = inv ? 'Inventory Report' : phase === 'in' ? 'Check-in Report' : 'Check-out Report';
       const RED = [166, 16, 17], GREEN = RED, DARK = [33, 28, 28], MUTED = [110, 100, 100];
       let y;
       const drawHeader = () => {
@@ -918,10 +930,11 @@
       header();
       // meta
       doc.setFontSize(10);
-      const meta = [['Agreement', r.agreement || '-'], ['Villa', v.name], ['Tenant', r.tenant || '-'], ['Check-in', fmt(r.checkIn)], ['Check-out', fmt(r.checkOut)],
+      const meta = inv ? [['Villa', v.name], ['Inventory date', fmt(r.invDate)]] : [['Agreement', r.agreement || '-'], ['Villa', v.name], ['Tenant', r.tenant || '-'], ['Check-in', fmt(r.checkIn)], ['Check-out', fmt(r.checkOut)],
       ];
       const invD = phase === 'in' ? r.invDate : r.outInvDate, refD = phase === 'in' ? r.checkIn : r.checkOut;
-      if (invD && invD !== refD) meta.push([phase === 'in' ? 'Inventory date' : 'Check-out inventory', fmt(invD)]);
+      if (!inv && invD && invD !== refD) meta.push([phase === 'in' ? 'Inventory date' : 'Check-out inventory', fmt(invD)]);
+      if (inv && r.notes) meta.push(['Notes', r.notes]);
       if (r.phone) meta.push(['Phone', r.phone]);
       if (r.email) meta.push(['Email', r.email]);
       if (r.idNo) meta.push(['ID no.', r.idNo]);
@@ -1017,8 +1030,20 @@
           table(['Item', 'Check-in', 'Result'], r.outItems[k].map(it => [it.name, it.inQty > 0 ? `${it.inQty} ${it.inCond}` : 'Not at check-in', result(it).t]), { 1: { cellWidth: 34 }, 2: { cellWidth: 44 } });
         }
       }
-      // tenant acknowledgement + signatures
+      // tenant acknowledgement + signatures (inventory: confirmation by GW Realty, no tenant)
       need(68); y += 6;
+      if (inv) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Confirmation', M, y); y += 6;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+        const l2 = doc.splitTextToSize('This report records the items, quantities and conditions found in the villa on the inventory date above.', W - 2 * M); doc.text(l2, M, y); y += l2.length * 4.5 + 16;
+        doc.setDrawColor(...DARK); doc.line(M, y, M + 75, y); doc.line(W - M - 75, y, W - M, y);
+        doc.setFontSize(9); doc.setTextColor(...MUTED);
+        doc.text('Owner / Villa / Listing', M, y + 5); doc.text('Inventory by (GW Realty)', W - M - 75, y + 5);
+        doc.text("Owner's Representative", M, y + 10);
+        doc.text('Name:', M, y + 16); doc.text('Name:', W - M - 75, y + 16);
+        doc.text('Date:', M, y + 22); doc.text('Date:', W - M - 75, y + 22);
+        doc.setTextColor(...DARK); y += 27;
+      } else {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Tenant acknowledgement', M, y); y += 6;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
       const ack = phase === 'in'
@@ -1032,6 +1057,7 @@
       doc.text('Name:', M, y + 16); doc.text(doc.splitTextToSize(`Name: ${r.tenant || ''}`, 75)[0], W - M - 75, y + 16);
       doc.text('Date:', M, y + 22); doc.text('Date:', W - M - 75, y + 22);
       doc.setTextColor(...DARK); y += 27;
+      }
       // headers on pages added by autoTable + footers
       const pages = doc.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
@@ -1044,7 +1070,7 @@
         doc.text(`Page ${i} of ${pages}`, W - M, 291, { align: 'right' });
       }
       const safe = x => String(x).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
-      const fname = `${r.agreement ? safe(r.agreement) + '-' : ''}${safe(v.name)}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
+      const fname = `${r.agreement ? safe(r.agreement) + '-' : ''}${safe(v.name)}-${inv ? 'inventory' : phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
       doc.save(fname);
       toast('PDF generated: ' + fname);
       // Status stays next to the button (a toast disappears after 3 seconds).
@@ -1175,8 +1201,8 @@
       if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) r.inItems[room.id] = []; }
       save(); toast(T(`${room.id_} ditambahkan. Ambil foto atau tambah barang.`, `${name} added.`)); render(true);
     }
-    else if (act === 'startIn') {
-      const r = { id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() };
+    else if (act === 'startIn' || act === 'startInv') {
+      const r = Object.assign({ id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() }, act === 'startInv' ? { kind: 'inv' } : {});
       S.records.push(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
     }
     else if (act === 'startOut') { const r = rec(b.dataset.r); r.status = 'out_draft'; r.outPhotos = {}; r.outInvDate = iso(today()); initOut(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/staff/capture/${r.id}`); }
@@ -1214,12 +1240,15 @@
     }
     else if (act === 'approveIn') {
       const r = rec(b.dataset.r); const err = document.getElementById('apErr'); const probs = [];
+      if (isInv(r)) { if (!r.invDate) probs.push('Add the inventory date.'); }
+      else {
       if (!r.agreement) probs.push('Add the agreement code.');
       else if (S.records.some(x => x.id !== r.id && x.agreement === r.agreement && x.status !== 'closed')) probs.push(`Agreement ${r.agreement} is already used on another open lease. Check the code.`);
       if (!r.checkIn) probs.push('Add the check-in date.');
       if (!r.checkOut) probs.push('Add the check-out date.');
       if (r.checkIn && r.checkOut && r.checkOut <= r.checkIn) probs.push('The check-out date must be after the check-in date.');
       if (r.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email)) probs.push('Enter a valid tenant email address, or leave it blank.');
+      }
       const noPh = r.seeded ? [] : roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length).map(x => x.en);
       if (noPh.length) probs.push(`Every room needs a photo. Missing: ${noPh.join(', ')}.`);
       const blank = Object.values(r.inItems || {}).some(l => l.some(i => !i.name.trim()));
@@ -1228,8 +1257,8 @@
       if (probs.length) { err.hidden = false; err.textContent = probs.join(' '); return; }
       const z = dropZeroQty(r);
       if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'The list is empty.'; return; }
-      r.status = 'occupied'; r.inApprovedAt = Date.now(); save();
-      toast(`Check-in approved.${z ? ` ${plural(z, 'item')} with quantity 0 removed.` : ''}`); render();
+      r.status = isInv(r) ? 'closed' : 'occupied'; r.inApprovedAt = Date.now(); save();
+      toast(`${isInv(r) ? 'Inventory approved. The villa stays empty.' : 'Check-in approved.'}${z ? ` ${plural(z, 'item')} with quantity 0 removed.` : ''}`); render();
       pushRecord(r).catch(e2 => { if (e2.status !== 409) { r.status = 'checkin_pending'; delete r.inApprovedAt; delete r._dirty; save(); render(); } onSaveError(r, e2, 'Not approved: saving to the server failed. Check the connection and approve again.'); });
     }
     else if (act === 'approveOut') {

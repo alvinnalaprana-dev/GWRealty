@@ -2,7 +2,7 @@
 // Same endpoints and the same server rules as the n8n workflows (login, token check, staff limits,
 // overwrite protection), so the demo behaves like the real system. AI is simulated.
 import { getStore } from '@netlify/blobs';
-import core from '../../n8n/src/gwcore.cjs';
+import core from '../n8n/src/gwcore.cjs';
 
 const KEY = 'gw-demo-2026';                 // public demo key: the demo holds sample data only
 const SECRET = 'gw-demo-token-secret';      // demo only; the real secret lives in n8n
