@@ -54,7 +54,13 @@ function gwPbkdf2(keyStr, saltHex, iter) {
   for (let i = 1; i < iter; i++) { u = hmac(u); for (let j = 0; j < 32; j++) t[j] ^= u[j]; }
   return gwHex(t);
 }
-function gwSalt() { let s = ''; for (let i = 0; i < 16; i++) s += ('0' + Math.floor(Math.random() * 256).toString(16)).slice(-2); return s; }
+function gwSalt() {
+  // Secure random bytes where the runtime offers them (Web Crypto); Math.random only as a last resort.
+  let b = null;
+  try { if (typeof crypto !== 'undefined' && crypto.getRandomValues) b = crypto.getRandomValues(new Uint8Array(16)); } catch (e) { b = null; }
+  if (!b) { b = []; for (let i = 0; i < 16; i++) b.push(Math.floor(Math.random() * 256)); }
+  return Array.from(b).map(x => ('0' + x.toString(16)).slice(-2)).join('');
+}
 const gwIsLegacy = stored => /^[0-9a-f]{64}$/.test(String(stored || ''));
 function gwStorePw(clientHash) { const salt = gwSalt(); return 'p2$' + GW_PW_ITER + '$' + salt + '$' + gwPbkdf2(clientHash, salt, GW_PW_ITER); }
 function gwCheckPw(stored, clientHash) {

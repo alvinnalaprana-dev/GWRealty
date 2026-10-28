@@ -841,7 +841,8 @@
     const costEdit = r.status === 'checkout_pending' || r.status === 'closed';
     const ch = changes(r);
     const unchecked = Object.keys(r.outItems || {}).filter(k => !(r.outPhotos[k] || []).length).map(k => roomName(k, 'en'));
-    const nItems = Object.values(r.outItems || {}).reduce((a, l) => a + l.length, 0);
+    const allOut = Object.values(r.outItems || {}).reduce((a, l) => a.concat(l), []);
+    const nItems = allOut.filter(it => it.inQty > 0).length, nNew = allOut.length - nItems;   // check-in baseline vs items found only at check-out
     const nPh = count(r.outPhotos);
     const condCell = (k, it) => edit ? `<select data-ok="cond" data-room="${k}" data-iid="${it.id}" aria-label="Check-out result">${CONDS.map(c => `<option${c === it.cond ? ' selected' : ''}>${c}</option>`).join('')}</select>` : it.cond;
     const noteCell = (k, it) => edit ? `<input data-ok="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note">` : `<span class="note">${esc(it.note)}</span>`;
@@ -871,7 +872,7 @@
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-out review' : 'Check-out · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <p class="sub">Agreement <b>${esc(r.agreement || '—')}</b> · Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)} · Check-out inventory ${fmt(r.outInvDate)}</p>
-      ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the check-in list (${nItems} items) and staff checked the result.</b> ${ch.length} change${ch.length === 1 ? '' : 's'}. Correct if needed, then approve. Items already worn or damaged at check-in are not counted again.</div>` : ''}
+      ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the check-in list (${nItems} items${nNew ? `, plus ${nNew} item${nNew === 1 ? '' : 's'} not at check-in` : ''}) and staff checked the result.</b> ${ch.length} change${ch.length === 1 ? '' : 's'}. Correct if needed, then approve. Items already worn or damaged at check-in are not counted again.</div>` : ''}
       ${unchecked.length ? `<div class="banner am">No check-out photos for: ${esc(unchecked.join(', '))}. Those items are marked "Not photographed".</div>` : ''}
       <div class="card"><h3>Changes since check-in</h3>
         <div class="tbl"><table class="vt itbl"><tr><th>Item</th><th>Room</th><th>Check-in</th><th>Result</th><th>Note</th><th>Cost (IDR)</th></tr>${chRows}</table></div>
@@ -1046,8 +1047,14 @@
       const fname = `${r.agreement ? safe(r.agreement) + '-' : ''}${safe(v.name)}-${phase === 'in' ? 'check-in' : 'check-out'}-${iso(new Date())}.pdf`;
       doc.save(fname);
       toast('PDF generated: ' + fname);
-      if (LIVE) api('gw-save-pdf', { method: 'POST', body: { fileName: fname, data: b64(doc.output('datauristring')) } })
-        .then(() => toast(REAL ? 'PDF saved to Google Drive.' : 'PDF saved (demo).')).catch(() => toast('PDF downloaded, but saving to Google Drive failed.'));
+      // Status stays next to the button (a toast disappears after 3 seconds).
+      const pdfSt = msg => { const pb = document.querySelector(`[data-act="pdf"][data-ph="${phase}"]`); if (!pb) return; let st = pb.parentNode.querySelector('.pdfst'); if (!st) { st = document.createElement('p'); st.className = 'note pdfst'; pb.parentNode.appendChild(st); } st.textContent = msg; };
+      if (LIVE) {
+        pdfSt('Saving ' + fname + ' to Google Drive…');
+        api('gw-save-pdf', { method: 'POST', body: { fileName: fname, data: b64(doc.output('datauristring')) } })
+          .then(() => { toast('PDF saved to Google Drive.'); pdfSt('✓ Saved to Google Drive: ' + fname); })
+          .catch(() => { toast('PDF downloaded, but saving to Google Drive failed.'); pdfSt('✕ Not saved to Google Drive. Check the connection and tap Generate PDF again.'); });
+      }
     } catch (e) {
       console.error(e);
       toast('The PDF could not be generated. Please try again.');

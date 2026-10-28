@@ -5,10 +5,22 @@
 const MODEL = 'claude-haiku-5-5';   // change to 'claude-sonnet-5-5' if Haiku misses too much
 const MAX_PHOTOS = 4;
 
-const b = $('Webhook').first().json.body || {};
-const photos = (Array.isArray(b.photos) ? b.photos : []).slice(0, MAX_PHOTOS)
-  .map(p => String(p).replace(/^data:image\/\w+;base64,/, ''));
-if (!photos.length) throw new Error('No photos sent');
+const MAX_PHOTO_B64 = 8 * 1024 * 1024;   // about 6 MB per photo (the app sends compressed JPEGs well under this)
+const raw = $('Webhook').first().json.body || {};
+const txt = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f`]/g, ' ').slice(0, n);   // short, single-line text for the prompt
+const b = {
+  phase: raw.phase, villa: txt(raw.villa, 80), room: txt(raw.room, 80),
+  expected: (Array.isArray(raw.expected) ? raw.expected : []).slice(0, 150).map(x => [txt((x || [])[0], 80), Math.max(0, Math.min(999, parseInt((x || [])[1], 10) || 1))]),
+  checkin: (Array.isArray(raw.checkin) ? raw.checkin : []).slice(0, 300).map(i => ({ id: txt((i || {}).id, 40), name: txt((i || {}).name, 80), qty: Math.max(0, Math.min(999, parseInt((i || {}).qty, 10) || 0)), cond: txt((i || {}).cond, 12) })),
+};
+const media = [];
+const photos = (Array.isArray(raw.photos) ? raw.photos : []).slice(0, MAX_PHOTOS).map(p => {
+  const m = String(p).match(/^data:(image\/(?:jpeg|png|webp|gif));base64,/);
+  media.push(m ? m[1] : 'image/jpeg');
+  return String(p).replace(/^data:image\/\w+;base64,/, '');
+});
+if (!photos.length) return deny(400, 'No photos sent');
+if (photos.some(p => p.length > MAX_PHOTO_B64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(p))) return deny(400, 'A photo is too large or damaged. Retake it.');
 const phase = b.phase === 'out' ? 'out' : 'in';
 
 const rules = `You check villa inventory from photos for a property manager in Bali.
@@ -37,7 +49,7 @@ For each check-in item, report what you see now. If an item is not visible in th
 Return: {"quality":"ok"|"retake","quality_note":"","items":[{"id":"","qty":1,"cond":"Good","note":"","seen":true}],"extra":[{"name":"","qty":1,"cond":"Good","note":""}]}`;
 }
 
-const content = photos.map(data => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } }));
+const content = photos.map((data, i) => ({ type: 'image', source: { type: 'base64', media_type: media[i], data } }));
 content.push({ type: 'text', text: task });
 
 return [{ json: { ok: true, phase, body: { model: MODEL, max_tokens: 3000, system: rules, messages: [{ role: 'user', content }] } } }];
