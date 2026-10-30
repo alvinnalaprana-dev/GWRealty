@@ -188,10 +188,11 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
     if (existing && !draft && !(existing.status === 'occupied' && r.status === 'out_draft')) {
       return { ok: false, status: 403, error: 'This record has already been sent to the manager.' };
     }
+    // Staff never set tenant contact details: keep the stored ones (or none for a new record).
     if (existing) GW_PRIVATE.forEach(k => { if (existing[k] !== undefined) r[k] = existing[k]; else delete r[k]; });
+    else GW_PRIVATE.forEach(k => delete r[k]);
     // During a check-out, the approved check-in (list, photos, lease details) cannot be changed by staff.
     if (existing && existing.inApprovedAt) GW_LOCKED_AFTER_CHECKIN.forEach(k => { if (existing[k] !== undefined) r[k] = existing[k]; else delete r[k]; });
-    else GW_PRIVATE.forEach(k => delete r[k]);
   }
   r.updatedAt = nowIso || new Date().toISOString();
   return { ok: true, status: 200, record: r };
