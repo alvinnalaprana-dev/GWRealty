@@ -16,3 +16,10 @@
   to = "https://inventory.gwrealtyglobal.com/:splat"
   status = 301
   force = true
+
+# MAINTENANCE: every page shows maintenance.html. Remove this block to bring the app back.
+[[redirects]]
+  from = "/*"
+  to = "/maintenance.html"
+  status = 200
+  force = true
