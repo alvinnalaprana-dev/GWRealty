@@ -292,3 +292,5 @@ select:disabled{opacity:.5}
 .ops .mv{border:1px solid var(--line2);background:#fff;color:var(--ink);border-radius:6px;font-size:14px;line-height:1;padding:5px 7px;cursor:pointer}
 .ops .mv:hover{background:var(--soft)}
 @media (max-width:640px){.ops .mv{font-size:16px;padding:7px 9px}}
+.syncst{font-size:12px;color:var(--muted);margin:0 0 6px;text-align:center}
+.syncst.ok{color:#2E7D4F}.syncst.off,.syncst.err{color:#8a5a00}.syncst.conflict{color:#B3261E}

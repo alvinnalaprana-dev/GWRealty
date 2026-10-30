@@ -80,7 +80,8 @@
     if (!S || S.v !== 7) S = seed();
   }
   let saveWarned = false;
-  function save() {
+  function save() { const ok = saveQ(); draftChanged(); return ok; }
+  function saveQ() {
     try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
     catch (e) { if (!saveWarned) { saveWarned = true; toast(T('Memori perangkat penuh: data belum tersimpan di perangkat. Kirim sekarang atau kosongkan memori.', 'This device could not store the data (storage full or blocked). Save to the server now.')); } return false; }
   }
@@ -137,7 +138,7 @@
     if (e && e.status === 401) return;
     toast((e && e.status === 403 && e.message) ? e.message : msg);
   }
-  async function pushRecord(r) {
+  async function pushRecordNow(r) {
     if (!LIVE) return;
     r.photoFiles = r.photoFiles || {};
     const pending = [];
@@ -151,13 +152,47 @@
       const res = await api('gw-save-record', { method: 'POST', body: { record: rec, photos } });
       if (res && res.photoFiles) r.photoFiles = Object.assign(r.photoFiles, res.photoFiles);
       if (res && res.updatedAt) r.updatedAt = res.updatedAt;
-      save();
+      saveQ();
     };
-    r._dirty = true; save();
+    r._dirty = true; saveQ();
     if (!pending.length) await send([]);
     else for (let i = 0; i < pending.length; i += 5) await send(pending.slice(i, i + 5));
-    delete r._dirty; save();
+    delete r._dirty; saveQ();
   }
+  // One save per record at a time (autosave and Send must never race: the second would be refused as a conflict).
+  const PUSHQ = {};
+  function pushRecord(r) { const run = () => pushRecordNow(r); const p = (PUSHQ[r.id] || Promise.resolve()).catch(() => {}).then(run); PUSHQ[r.id] = p; return p; }
+
+  /* ---------- autosave: an open draft is saved to the server (record + new photos) a few seconds after each change ---------- */
+  let syncTimer = null, syncBusy = false, syncAgain = false, syncState = { t: '', at: 0 }, syncRid = '';
+  const openDraft = () => { const m = location.hash.match(/\/capture\/([^/]+)/); if (!m) return null; const r = rec(m[1]); return r && (r.status === 'in_draft' || r.status === 'out_draft') ? r : null; };
+  function syncLabel() {
+    const el = document.getElementById('syncSt'); if (!el) return;
+    const tm = syncState.at ? new Date(syncState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    el.className = 'syncst ' + (syncState.t || '');
+    el.textContent = !LIVE ? 'Saved on this device.' : syncState.t === 'busy' ? 'Saving to the server…' : syncState.t === 'ok' ? `✓ Saved to the server at ${tm}` : syncState.t === 'off' ? 'No internet: saved on this phone. It is sent to the server when the connection is back.' : syncState.t === 'err' ? 'Not saved to the server yet: saved on this phone. Retrying…' : syncState.t === 'conflict' ? 'This draft was changed on another device. Your copy is kept on this phone; tell the manager.' : 'Saved on this phone.';
+  }
+  // Only real changes are saved (a phone that just opens or looks at a draft never writes, so it cannot clash with the phone doing the work).
+  const FP = {};
+  const fpOf = r => JSON.stringify(r, (k, v) => (k === 'updatedAt' || k === '_dirty' || k === 'photoFiles') ? undefined : v);
+  function draftChanged() { if (!LIVE) return; const r = openDraft(); if (!r || FP[r.id] === fpOf(r)) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncDraft, 4000); }
+  async function syncDraft() {
+    const r = openDraft(); if (!r) return;
+    if (syncBusy) { syncAgain = true; return; }
+    if (!navigator.onLine) { syncState = { t: 'off', at: syncState.at }; syncLabel(); return; }
+    syncBusy = true; syncState = { t: 'busy', at: syncState.at }; syncLabel();
+    const f = fpOf(r);
+    try { await pushRecord(r); FP[r.id] = f; syncState = { t: 'ok', at: Date.now() }; }
+    catch (e) {
+      if (e && e.status === 409) syncState = { t: 'conflict', at: syncState.at };
+      else if (e && e.status === 401) syncState = { t: '', at: syncState.at };
+      else { syncState = { t: navigator.onLine ? 'err' : 'off', at: syncState.at }; clearTimeout(syncTimer); syncTimer = setTimeout(syncDraft, 30000); }
+    }
+    syncBusy = false; syncLabel();
+    if (syncAgain) { syncAgain = false; draftChanged(); }
+  }
+  window.addEventListener('online', () => { if (openDraft()) syncDraft(); });
+  window.addEventListener('offline', () => { if (openDraft()) { syncState = { t: 'off', at: syncState.at }; syncLabel(); } });
   async function pushSettings() {
     if (!LIVE) return;
     const users = (S.users || []).map(u => Object.assign({ id: u.id, name: u.name, email: u.email, role: u.role }, u.pwNew ? { pw: u.pwNew } : {}));
@@ -484,6 +519,7 @@
     }
     const photos = r[phase + 'Photos'] || (r[phase + 'Photos'] = {});
     initAiRead(r, phase);
+    const firstOpen = syncRid !== r.id; if (firstOpen) { syncRid = r.id; syncState = { t: '', at: 0 }; }
     const rooms = capRooms(r, phase).map(room => {
       const list = photos[room.id] || [];
       const busy = BUSY.has(`${r.id}:${phase}:${room.id}`);
@@ -531,11 +567,14 @@
       </div>` : ''}
       <p style="text-align:center;margin:14px 0 4px"><button class="linkbtn cancelDraft" data-act="cancelDraft" data-r="${r.id}">Cancel this ${isInv(r) ? 'inventory' : phase === 'in' ? 'check-in' : 'check-out'}</button></p>
       <div class="sticky">
+        <p class="syncst" id="syncSt" aria-live="polite"></p>
         <p class="err" role="alert" id="sendErr" hidden></p>
         <button class="btn block" data-act="send" data-r="${r.id}">Send to manager (${total} photo${total === 1 ? '' : 's'})</button>
       </div>
     </div>`;
-    confirmMissing = false;
+    confirmMissing = false; syncLabel();
+    // On opening: send what this phone has not sent yet (photos taken offline, edits not saved). Nothing to send = no save (another phone may be on it).
+    if (firstOpen) { if (r._dirty || ['in', 'out'].some(ph => Object.values(r[ph + 'Photos'] || {}).some(l => l.some(pid => !(r.photoFiles || {})[pid])))) draftChanged(); else FP[r.id] = fpOf(r); }
     Object.entries(photos).forEach(([room, ids]) => ids.forEach(async pid => {
       const p = await getPhoto(pid); if (!p) return;
       if (p.old) { const el = app.querySelector(`[data-old="${pid}"]`); if (el) el.hidden = false; }
@@ -602,7 +641,7 @@
     const finish = msg => { BUSY.delete(key); save(); if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(msg); } };
     const okMsg = phase === 'in' ? `AI done: ${roomName(room)}. Check the list.` : `AI finished comparing ${roomName(room)}.`;
     if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); r.aiState[phase + ':' + room] = 'ok'; ((r[phase + 'Photos'] || {})[room] || []).forEach(pid => { aiReadOf(r)[pid] = 1; }); finish(okMsg); }, 1600); return; }
-    const AI_MAX = 4;
+    const AI_MAX = 4; let lastQ = '';
     const chunks = [];
     if (phase === 'in') for (let i = 0; i < good.length; i += AI_MAX) chunks.push(good.slice(i, i + AI_MAX));
     else chunks.push(good.slice(-AI_MAX));
@@ -615,7 +654,7 @@
       if (phase === 'in' && ro && Array.isArray(ro.cat) && ro.cat.length) body.expected = ro.cat;
       else if (phase === 'in' && CAT[room] && !REAL) body.expected = CAT[room];
       if (phase === 'out') body.checkin = r.outItems[room].map(i => ({ id: i.id, name: i.name, qty: i.inQty, cond: i.inCond }));
-      const res = await api('gw-ai-room', { method: 'POST', body });
+      const res = await api('gw-ai-room', { method: 'POST', body }); lastQ = res && res.quality;
       if (!res || !res.ok) throw new Error((res && res.error) || 'AI error');
       r.aiNote = r.aiNote || {};
       if (res.quality === 'retake') r.aiNote[phase + ':' + room] = res.quality_note || 'Photo not clear enough.'; else delete r.aiNote[phase + ':' + room];
@@ -642,8 +681,9 @@
       (phase === 'in' ? chunk : ((r.outPhotos || {})[room] || [])).forEach(pid => { aiReadOf(r)[pid] = 1; });
       save();
      }
-      finish(res.quality === 'retake' ? 'AI: photo not clear enough. See the note in that room.' : okMsg);
+      finish(lastQ === 'retake' ? 'AI: photo not clear enough. See the note in that room.' : okMsg);
     } catch (e) {
+      try { console.warn('AI error', e && (e.stack || e.message || e)); } catch (e3) { /* ignore */ }
       if (phase === 'in') { r.inItems = r.inItems || {}; r.inItems[room] = r.inItems[room] || []; }
       r.aiState[phase + ':' + room] = 'fail';
       if (e && e.status === 401) { BUSY.delete(key); return; }
