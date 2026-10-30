@@ -2,7 +2,7 @@
   "name": "GW Inventory · 8 Monthly report (30th)",
   "nodes": [
     {
-      "id": "94721156-4312-4654-aea7-9398d0aa498c",
+      "id": "042d49bd-41ee-49fc-8d26-99c86920c445",
       "name": "28th-31st 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "2ed56d74-9e6c-4684-be0b-213f26cb4240",
+      "id": "5a9a0634-96ce-4754-9df9-1623f696c157",
       "name": "Read records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
@@ -52,7 +52,7 @@
       }
     },
     {
-      "id": "27c8bf30-fe30-4b46-bea4-7a4b50283248",
+      "id": "ce19c632-06e3-4290-8292-ad9e1b1d7862",
       "name": "Monthly numbers",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -65,7 +65,7 @@
       }
     },
     {
-      "id": "9e4cda10-9fb3-45ea-bf2d-55efd6c6ec0a",
+      "id": "e7aff9c5-7470-4f76-9293-eecc109a619e",
       "name": "Claude Opus summary",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -103,7 +103,7 @@
       }
     },
     {
-      "id": "043c0786-c075-481d-b2fc-3965b4a42c53",
+      "id": "9440870d-1ace-45b2-b9aa-1e62cb52d90b",
       "name": "Build email",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -116,7 +116,7 @@
       }
     },
     {
-      "id": "76217073-e3e6-4fd8-9003-d483a337785e",
+      "id": "571dd231-ed53-49af-b74f-e87c217262c2",
       "name": "Email manager",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,

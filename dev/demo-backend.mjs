@@ -8,7 +8,8 @@ const KEY = 'gw-demo-2026';                 // public demo key: the demo holds s
 const SECRET = 'gw-demo-token-secret';      // demo only; the real secret lives in n8n
 const BOOT = [
   { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr', pw: core.gwPwHash('manno.realtor@gmail.com', 'gwrealty2026') },
-  { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff', pw: core.gwPwHash('wayan@gwrealtyglobal.com', 'wayan2026') }
+  { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff', pw: core.gwPwHash('wayan@gwrealtyglobal.com', 'wayan2026') },
+  { id: 'u-admin', name: 'Kriyator support', email: 'support@kriyator.com', role: 'admin', pw: core.gwPwHash('support@kriyator.com', 'support2026') }
 ];
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
@@ -34,7 +35,7 @@ export default async (req) => {
   if (!who) return json({ ok: false, error: 'Please sign in again.' }, 401);
 
   if (ep === 'gw-reset') {
-    if (who.role !== 'mgr') return json({ ok: false, error: 'Only the manager can reset the demo.' }, 403);
+    if (!core.gwIsMgr(who.role)) return json({ ok: false, error: 'Only the manager can reset the demo.' }, 403);
     const { blobs } = await store.list();
     for (const b of blobs) await store.delete(b.key);
     return json({ ok: true });

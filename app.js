@@ -50,7 +50,8 @@
       v: 7, role: null, user: null,
       users: [
         { id: 'u-mgr', name: 'Manager', email: 'manno.realtor@gmail.com', role: 'mgr', pw: 'fc3faa9bd06be49cc0cb0a59f8fdff6a3b35f3a8ddd82b4b4acc9dcb4f157868' },
-        { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff', pw: 'b9d5a90c1253cdffed78c96fe6235c6a1ed447013a57ad60c5907b1aa1b7fe2d' }
+        { id: 'u-wayan', name: 'Wayan', email: 'wayan@gwrealtyglobal.com', role: 'staff', pw: 'b9d5a90c1253cdffed78c96fe6235c6a1ed447013a57ad60c5907b1aa1b7fe2d' },
+        { id: 'u-admin', name: 'Kriyator support', email: 'support@kriyator.com', role: 'admin', pw: '67bac01cf309833dda085e5de20c1f064962b570772415cc8fceba0045030f23' }
       ],
       villas: [
         { id: 'madya1', name: 'Villa Madya 1', area: '' },
@@ -80,6 +81,18 @@
   const villa = id => S.villas.find(v => v.id === id);
   const pwHash = async (email, pw) => { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).toLowerCase().trim() + ':' + pw)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); };
   const curUser = () => (S.users || []).find(u => u.id === S.user);
+  // Roles: 'admin' (Support Admin), 'mgr' (Manager), 'staff'. Admins and managers use the manager screens and may also use the staff screens.
+  const isMgrRole = role => role === 'mgr' || role === 'admin';
+  const meAdmin = () => (curUser() || {}).role === 'admin';
+  const ROLE_NAME = { admin: 'Support Admin', mgr: 'Manager', staff: 'Staff' };
+  let villaSort = 'name';   // villa list order: 'name' | 'new' | 'old'
+  const sortVillas = list => { const l = list.slice(); const idx = v => S.villas.indexOf(v);
+    if (villaSort === 'name') l.sort((a, b) => String(a.name).localeCompare(String(b.name), 'en', { sensitivity: 'base' }));
+    else l.sort((a, b) => ((a.createdAt || 0) - (b.createdAt || 0)) || (idx(a) - idx(b)));
+    if (villaSort === 'new') l.reverse(); return l; };
+  const villaTools = (id, n) => n < 2 ? '' : `<div class="vtools"><input type="search" class="vsearch" data-list="${id}" placeholder="Search villas…" aria-label="Search villas" autocomplete="off">
+    <select class="vsort" aria-label="Sort villas"><option value="name"${villaSort === 'name' ? ' selected' : ''}>Name A–Z</option><option value="new"${villaSort === 'new' ? ' selected' : ''}>Newest added</option><option value="old"${villaSort === 'old' ? ' selected' : ''}>Oldest added</option></select></div>
+    <p class="note vnone" data-none="${id}" hidden>No villa matches your search.</p>`;
   const rec = id => S.records.find(r => r.id === id);
   const activeRec = vid => S.records.find(r => r.villaId === vid && r.status !== 'closed' && r.status !== 'cancelled');
   // Inventory listing: a villa inventory without a tenant (kind 'inv'). It uses the check-in screens and ends 'closed' when approved.
@@ -156,7 +169,7 @@
       if (st) {
         S.settingsAt = st.updatedAt || '';
         if (Array.isArray(st.villas)) S.villas = st.villas;
-        if (S.role === 'mgr' && Array.isArray(st.users) && st.users.length) S.users = st.users.map(u => { const old = (S.users || []).find(x => x.id === u.id); return old && old.pwNew ? Object.assign({}, u, { pwNew: old.pwNew }) : u; });
+        if (isMgrRole((curUser() || {}).role || S.role) && Array.isArray(st.users) && st.users.length) S.users = st.users.map(u => { const old = (S.users || []).find(x => x.id === u.id); return old && old.pwNew ? Object.assign({}, u, { pwNew: old.pwNew }) : u; });
       } else if (S.role === 'mgr') {
         // Fresh storage: the manager seeds it. Real system: GW Realty's villas and only the manager's own account, no sample leases.
         if (REAL) { S.records = []; S.villas = JSON.parse(JSON.stringify(window.GW_REAL_VILLAS || [])); S.users = (S.users || []).filter(u => u.id === S.user); }
@@ -287,9 +300,10 @@
   function renderBar() {
     const u = curUser();
     const role = S.role === 'mgr' ? (u ? u.name : 'Manager') : S.role === 'staff' ? `Staff · ${u ? u.name : ''}` : '';
+    const sw = u && isMgrRole(u.role) ? (S.role === 'staff' ? '<a class="linkbtn" href="#/mgr">Manager view</a>' : '<a class="linkbtn" href="#/staff">Staff view</a>') : '';
     barEl.innerHTML = `<div class="bar-in">
       <a class="brand" href="#/"><img src="logo-white.png" alt="GW Realty"><span>Inventory</span></a>
-      <div class="bar-r">${API.label ? `<span class="demo">${esc(API.label)}</span>` : ''}${role ? `<span class="role">${esc(role)}</span><button class="linkbtn" data-act="switch">Sign out</button>` : ''}</div>
+      <div class="bar-r">${API.label ? `<span class="demo">${esc(API.label)}</span>` : ''}${role ? `<span class="role">${esc(role)}</span>${sw}<button class="linkbtn" data-act="switch">Sign out</button>` : ''}</div>
     </div>`;
   }
 
@@ -301,7 +315,8 @@
     viewToken++;
     const p = location.hash.replace(/^#\/?/, '').split('/');
     const u = curUser();
-    if ((p[0] === 'staff' || p[0] === 'mgr') && (!u || u.role !== p[0])) { location.hash = u ? '#/' + u.role : '#/login'; return; }
+    const home = u ? (isMgrRole(u.role) ? '#/mgr' : '#/staff') : '#/login';
+    if ((p[0] === 'staff' && !u) || (p[0] === 'mgr' && (!u || !isMgrRole(u.role)))) { location.hash = home; return; }
     if (p[0] === 'staff') S.role = 'staff';
     if (p[0] === 'mgr') S.role = 'mgr';
     if (p[0] === '' && S.role) { go(S.role === 'mgr' ? '#/mgr' : '#/staff'); return; }
@@ -312,6 +327,8 @@
     else if (p[0] === 'mgr' && p[1] === 'rec') viewRecord(p[2]);
     else if (p[0] === 'mgr' && p[1] === 'new') viewNew();
     else if (p[0] === 'mgr' && p[1] === 'team') viewTeam();
+    else if (p[0] === 'mgr' && p[1] === 'villa') viewVilla(p[2]);
+    else if (p[0] === 'mgr' && p[1] === 'capture') viewCapture(p[2]);
     else if (p[0] === 'mgr') { viewMgrHome(); pullAll().then(ch => { if (ch && location.hash.replace(/^#\/?/, '') === 'mgr') render(true); }); }
     else viewLogin();
     save();
@@ -343,12 +360,14 @@
 
   /* ---------- team (manager creates accounts) ---------- */
   function viewTeam() {
-    const rows = S.users.map(u => `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.email)}</td><td>${u.role === 'mgr' ? chip('ok', 'Manager') : chip('', 'Staff')}</td>
-      <td style="text-align:right">${u.id !== S.user ? `<button class="btn ghost sm" data-act="delUser" data-u="${u.id}">Remove</button>` : '<span class="note">You</span>'}</td></tr>`).join('');
+    const admin = meAdmin();
+    const canEdit = u => admin || u.role !== 'admin';   // only a Support Admin can change or remove a Support Admin
+    const rows = S.users.map(u => `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.email)}</td><td>${u.role === 'admin' ? chip('ai', 'Support Admin') : u.role === 'mgr' ? chip('ok', 'Manager') : chip('', 'Staff')}</td>
+      <td style="text-align:right">${u.id === S.user ? '<span class="note">You</span>' : canEdit(u) ? `<button class="btn ghost sm" data-act="delUser" data-u="${u.id}">Remove</button>` : '<span class="note">Protected</span>'}</td></tr>`).join('');
     app.innerHTML = `<div class="page narrow">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">Accounts</p><h1>Team</h1></div></div>
-      <p class="sub">Managers add villas, review every inventory and manage accounts. Staff only do the inventory on their phone. Create an account for each person and tell them their password. Keep a second manager account (e.g. a backup) so a forgotten manager password can always be reset here.</p>
+      <p class="sub">Managers add villas, review every inventory and manage accounts, and can also do inventories themselves (Staff view). Staff only do inventories on their phone. Create an account for each person and tell them their password. The Support Admin account (Kriyator support) can do everything and can only be changed by a Support Admin, so access can always be restored.</p>
       <div class="tbl"><table class="vt"><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>${rows}</table></div>
       <div class="card">
         <h3>Create an account</h3>
@@ -356,7 +375,7 @@
           <div class="fld"><label for="nuName">Name</label><input id="nuName" placeholder="e.g. Komang"></div>
           <div class="fld"><label for="nuEmail">Email</label><input id="nuEmail" type="email" placeholder="komang@gwrealtyglobal.com"></div>
           <div class="fld"><label for="nuPw">Password</label><div class="pwwrap"><input id="nuPw" type="password" autocomplete="new-password" placeholder="At least 8 characters">${EYE('nuPw')}</div></div>
-          <div class="fld"><label for="nuRole">Role</label><select id="nuRole"><option value="staff">Staff (inventory on phone)</option><option value="mgr">Manager (review, villas, accounts)</option></select></div>
+          <div class="fld"><label for="nuRole">Role</label><select id="nuRole"><option value="staff">Staff (inventory on phone)</option><option value="mgr">Manager (everything)</option>${admin ? '<option value="admin">Support Admin (everything, protected)</option>' : ''}</select></div>
         </div>
         <p class="err" role="alert" id="nuErr" hidden></p>
         <button class="btn" data-act="addUser">Create account</button>
@@ -364,7 +383,7 @@
       <div class="card">
         <h3>Change a password</h3>
         <div class="form">
-          <div class="fld"><label for="cpUser">Account</label><select id="cpUser">${S.users.map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}</select></div>
+          <div class="fld"><label for="cpUser">Account</label><select id="cpUser">${S.users.filter(canEdit).map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}</select></div>
           <div class="fld"><label for="cpPw">New password</label><div class="pwwrap"><input id="cpPw" type="password" autocomplete="new-password" placeholder="At least 8 characters">${EYE('cpPw')}</div></div>
         </div>
         <p class="err" role="alert" id="cpErr" hidden></p>
@@ -376,10 +395,10 @@
 
   /* ---------- staff home ---------- */
   function viewStaffHome() {
-    const cards = S.villas.map(v => {
+    const cards = sortVillas(S.villas).map(v => {
       const r = activeRec(v.id);
       let status, info = '', btn = '';
-      if (!r) { status = chip('', 'Empty'); info = 'Ready for inventory or check-in'; btn = `<div class="row2"><button class="btn block ghost" data-act="startInv" data-v="${v.id}">Start inventory</button><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`; }
+      if (!r) { status = chip('', 'Empty'); info = (v.lease && (v.lease.tenant || v.lease.checkIn)) ? `Next tenant: ${esc(v.lease.tenant || '—')}${v.lease.checkIn ? ' · check-in ' + fmt(v.lease.checkIn) : ''}` : 'Ready for inventory or check-in'; btn = `<div class="row2"><button class="btn block ghost" data-act="startInv" data-v="${v.id}">Start inventory</button><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`; }
       else if (r.status === 'in_draft') { const w = isInv(r) ? 'inventory' : 'check-in'; status = chip('am', `${isInv(r) ? 'Inventory' : 'Check-in'} photos not sent yet`); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue ${w}</a>`; }
       else if (r.status === 'checkin_pending') { status = chip('am', 'Waiting for manager approval'); info = isInv(r) ? 'Inventory photos sent' : 'Check-in photos sent'; }
       else if (r.status === 'occupied') {
@@ -391,11 +410,12 @@
       }
       else if (r.status === 'out_draft') { status = chip('am', 'Check-out photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-out</a>`; }
       else if (r.status === 'checkout_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-out photos sent'; }
-      return `<div class="villa"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
+      return `<div class="villa" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
     }).join('');
     app.innerHTML = `<div class="page narrow">
       <div class="head"><div><p class="eyebrow">Hello, ${esc((curUser() || {}).name || '')}</p><h1>Villas</h1></div></div>
       <p class="sub">Choose a villa for an inventory, check-in or check-out. Just take photos; the item list is made automatically.</p>
+      ${villaTools('staff', S.villas.length)}
       <div class="vlist">${cards}</div>
       ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data is shared with the manager.' : 'Demo: data stays in this browser.'}</p>`}
     </div>`;
@@ -444,7 +464,7 @@
     if (!r) { go('#/'); return; }
     const v = villa(r.villaId);
     const phase = phaseOf(r);
-    const home = '#/staff';
+    const home = S.role === 'mgr' ? '#/mgr' : '#/staff';
     if (r.status !== 'in_draft' && r.status !== 'out_draft') {
       app.innerHTML = `<div class="page narrow"><a href="${home}">← Back</a><div class="card"><p>Already sent to the manager.</p></div></div>`;
       return;
@@ -481,12 +501,13 @@
       <div class="card"><div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="${dKey}" value="${esc(r[dKey] || '')}"></div>
         <p class="note">${isInv(r) ? 'The date of this inventory.' : phase === 'in' ? 'Can differ from the tenant\'s check-in date.' : 'The date of the check-out inspection.'}</p></div>
       <p class="sub">Photograph every room. The AI lists the items in each room; check and correct the list before sending it to the manager.</p>
+      ${phase === 'in' && !capRooms(r, phase).length ? '<div class="banner">This villa has no rooms yet. Add its rooms under "Add a room" below (tap a suggestion or type a name), then photograph each one.</div>' : ''}
       ${phase === 'out' ? `<div class="banner">Take the photos from the same angles as the check-in photos.</div>` : ''}
       <p class="note" id="busy" aria-live="polite" hidden></p>
       ${rooms}
       ${phase === 'in' ? `<div class="card addroom">
         <h3>Add a room or miscellaneous items</h3>
-        <div class="sugg">${ROOM_SUGGEST.filter(([en]) => !roomsFor(r.villaId).some(x => x.en === en)).map(([en, idn]) => `<button class="chipbtn" data-act="addRoom" data-v="${r.villaId}" data-name="${en}" data-name-id="${idn}">+ ${idn}</button>`).join('')}</div>
+        <div class="sugg">${ROOMS.map(x => [x.en, x.en]).concat(ROOM_SUGGEST).filter(([en], i, a) => a.findIndex(y => y[0] === en) === i).filter(([en]) => !roomsFor(r.villaId).some(x => x.en === en)).map(([en, idn]) => `<button class="chipbtn" data-act="addRoom" data-v="${r.villaId}" data-name="${en}" data-name-id="${idn}">+ ${idn}</button>`).join('')}</div>
         <div class="row"><input id="newRoom" placeholder="Other room name, e.g. Bedroom 4" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Add</button></div>
         <p class="note">New rooms are saved for this villa and appear again at the next check-in and check-out.</p>
       </div>` : ''}
@@ -671,10 +692,11 @@
     return [7].map(n => { const d = addDays(co, -n); return { d: iso(d), n, sent: d <= today() }; });
   }
   function viewMgrHome() {
-    const rows = S.villas.map(v => {
-      const r = activeRec(v.id); const s = statusMgr(r);
-      return `<tr><td><b>${esc(v.name)}</b>${v.area ? `<br><span class="note">${esc(v.area)}</span>` : ''}</td>
-        <td>${r && r.tenant ? esc(r.tenant) : '—'}${r && r.agreement ? `<br><span class="note">${esc(r.agreement)}</span>` : ''}</td>
+    const rows = sortVillas(S.villas).map(v => {
+      const r = activeRec(v.id); const s = statusMgr(r); const L = v.lease || {};
+      const next = !r && (L.tenant || L.agreement || L.checkIn) ? `<span class="note">Next: ${esc(L.tenant || L.agreement || 'lease')}${L.checkIn ? ' · ' + fmt(L.checkIn) : ''}</span>` : '';
+      return `<tr data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><td><a class="vlink" href="#/mgr/villa/${v.id}"><b>${esc(v.name)}</b></a>${v.area ? `<br><span class="note">${esc(v.area)}</span>` : ''}</td>
+        <td>${r && r.tenant ? esc(r.tenant) : next || '—'}${r && r.agreement ? `<br><span class="note">${esc(r.agreement)}</span>` : ''}</td>
         <td class="num">${r && r.checkIn && r.status !== 'in_draft' && r.status !== 'checkin_pending' ? fmt(r.checkIn) : '—'}</td>
         <td class="num">${r && r.checkOut ? fmt(r.checkOut) : '—'}</td>
         <td>${s.chip}</td><td style="text-align:right">${s.act}</td></tr>`;
@@ -696,7 +718,8 @@
       <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Check-in PDF</button><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="out">Check-out PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`; }).join('')}
       </table></div>` : '<p class="note">Completed check-outs will appear here.</p>';
     app.innerHTML = `<div class="page">
-      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add villa</a></div></div>
+      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/staff">Do an inventory</a><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add villa</a></div></div>
+      ${villaTools('mgr', S.villas.length)}
       <div class="grid2">
         <div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
         <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'The server emails the manager at 08:00 WITA, 7 days before each check-out. Check the inbox to confirm delivery.' : 'In the live system an email goes to the manager 7 days before each check-out.'}</p></div>
@@ -714,12 +737,44 @@
     app.innerHTML = `<div class="page narrow">
       <a href="#/mgr">← Villas</a>
       <div class="head"><div><p class="eyebrow">Setup</p><h1>Add a villa</h1></div></div>
-      <p class="sub">Staff start each inventory on their phone at the villa. Rooms are added by staff during the first inventory.</p>
+      <p class="sub">A new villa starts with no rooms: staff add the room names during the first inventory. Tenant and contract details can be added on the villa's page at any time.</p>
       <div class="card">
-        <div class="fld"><label for="newVilla">Villa name</label><input id="newVilla" placeholder="e.g. Villa Matahari"></div>
+        <div class="fld"><label for="newVilla">Villa name</label><div class="pfx"><span id="pfxTxt">Villa</span><input id="newVilla" placeholder="e.g. Matahari" autocomplete="off"></div></div>
+        <p class="note">Do not type the word "Villa": it is added for you.</p>
+        <label class="chk"><input type="checkbox" id="newPfx" checked> Put "Villa" in front of the name (untick for a property that is not called Villa)</label>
+        <div class="fld"><label for="newArea">Area <span class="opt">optional</span></label><input id="newArea" placeholder="e.g. Canggu" autocomplete="off"></div>
         <p class="err" role="alert" id="nvErr" hidden></p>
         <button class="btn" data-act="addVilla">Add villa</button>
       </div>
+    </div>`;
+  }
+
+
+  /* ---------- villa page (manager): edit villa, upcoming lease details, any time ---------- */
+  const LEASE_F = [['agreement', 'Agreement / contract no.', 'text', 'e.g. GWR-AG-2026-031'], ['tenant', 'Tenant name', 'text', 'Tenant name'], ['phone', 'Phone', 'text', '+62…'], ['email', 'Email', 'email', 'tenant@email.com'], ['idNo', 'Passport / ID no.', 'text', ''], ['checkIn', 'Check-in date', 'date', ''], ['checkOut', 'Check-out date', 'date', ''], ['notes', 'Notes', 'text', 'e.g. deposit amount, agent']];
+  function viewVilla(id) {
+    const v = villa(id); if (!v) { go('#/mgr'); return; }
+    const r = activeRec(v.id), L = v.lease || {}, s = statusMgr(r);
+    const rooms = roomsFor(v.id);
+    app.innerHTML = `<div class="page narrow">
+      <a href="#/mgr">← Villas</a>
+      <div class="head"><div><p class="eyebrow">Villa</p><h1>${esc(v.name)}</h1></div><span>${s.chip}</span></div>
+      ${r ? `<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><p class="note" style="margin:0">${isInv(r) ? 'Inventory' : r.status === 'occupied' ? `Current tenant: ${esc(r.tenant || '—')} · check-out ${fmt(r.checkOut)}` : 'A record is open for this villa.'}</p>${s.act}</div></div>` : ''}
+      <div class="card">
+        <h3>Villa details</h3>
+        <div class="form">
+          <div class="fld"><label for="vName">Name</label><input id="vName" value="${esc(v.name)}" autocomplete="off"></div>
+          <div class="fld"><label for="vArea">Area <span class="opt">optional</span></label><input id="vArea" value="${esc(v.area || '')}" placeholder="e.g. Canggu" autocomplete="off"></div>
+        </div>
+        <p class="note">Rooms (${rooms.length}): ${rooms.length ? esc(rooms.map(x => x.en).join(', ')) : 'none yet. Staff add them during the first inventory.'}</p>
+      </div>
+      <div class="card">
+        <h3>Next lease</h3>
+        <p class="note">Fill this in whenever you have the details, even before staff go to the villa. The next check-in is filled in from here automatically, so at approval you only check it. Staff see the tenant name and dates, never the contact details or notes.</p>
+        <div class="form">${LEASE_F.map(([k, lab, type, ph]) => `<div class="fld"><label for="L-${k}">${lab}${k === 'agreement' || k === 'checkIn' || k === 'checkOut' ? '' : ' <span class="opt">optional</span>'}</label><input id="L-${k}" type="${type}" value="${esc(L[k] || '')}" placeholder="${esc(ph)}" autocomplete="off"></div>`).join('')}</div>
+      </div>
+      <p class="err" role="alert" id="vErr" hidden></p>
+      <div class="row"><button class="btn" data-act="saveVilla" data-v="${v.id}">Save</button>${v.lease ? `<button class="btn ghost" data-act="clearLease" data-v="${v.id}">Clear lease details</button>` : ''}</div>
     </div>`;
   }
 
@@ -793,6 +848,8 @@
   function viewCheckIn(r) {
     const v = villa(r.villaId);
     const edit = r.status === 'checkin_pending';
+    let fromVilla = false;
+    if (edit && !isInv(r) && v.lease) LEASE_F.forEach(([k]) => { if (!r[k] && v.lease[k]) { r[k] = v.lease[k]; fromVilla = true; } });
     const items = r.inItems || {};
     const roomIds = roomsFor(r.villaId).map(x => x.id).filter(k => items[k] || (r.inPhotos[k] || []).length);
     const nItems = Object.values(items).reduce((a, l) => a + l.length, 0);
@@ -834,7 +891,7 @@ ${isInv(r) ? `
         <div class="fld"><label for="f-in">Check-in date</label><input id="f-in" type="date" data-f="checkIn" value="${esc(r.checkIn)}" ${edit ? '' : 'readonly'}></div>
         <div class="fld"><label for="f-out">Check-out date</label><input id="f-out" type="date" data-f="checkOut" value="${esc(r.checkOut)}" ${edit ? '' : 'readonly'}></div>`}
       </div></div>
-      ${edit && !isInv(r) ? `<p class="note">Type the agreement code exactly as it is on the signed agreement.</p>` : ''}
+      ${edit && !isInv(r) ? `<p class="note">${fromVilla ? 'Filled in from the villa page. Check the details, then approve. ' : ''}Type the agreement code exactly as it is on the signed agreement.</p>` : ''}
       ${edit ? `<div class="banner ai"><b>${nItems} items in ${roomIds.length} room${roomIds.length === 1 ? '' : 's'}, listed by AI from ${nPh} photo${nPh === 1 ? '' : 's'} and checked by staff.</b> Correct anything that is wrong, then approve. Items marked <span class="warnico">⚠</span> are small items.</div>` : ''}
       ${edit && noPhotoRooms.length ? `<div class="banner am">No photos for: ${esc(noPhotoRooms.join(', '))}. Every room needs a photo; ask staff to add them before approving.</div>` : ''}
       ${edit ? '<p class="note">Items with quantity 0 are removed when you approve.</p>' : ''}
@@ -1040,12 +1097,12 @@ ${isInv(r) ? `
         doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Confirmation', M, y); y += 6;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
         const l2 = doc.splitTextToSize('This report records the items, quantities and conditions found in the villa on the inventory date above.', W - 2 * M); doc.text(l2, M, y); y += l2.length * 4.5 + 16;
-        doc.setDrawColor(...DARK); doc.line(M, y, M + 75, y); doc.line(W - M - 75, y, W - M, y);
+        doc.setDrawColor(...DARK); doc.line(M, y, M + 75, y);
         doc.setFontSize(9); doc.setTextColor(...MUTED);
-        doc.text('Owner / Villa / Listing', M, y + 5); doc.text('Inventory by (GW Realty)', W - M - 75, y + 5);
+        doc.text('Owner / Agent / Listing', M, y + 5);
         doc.text("Owner's Representative", M, y + 10);
-        doc.text('Name:', M, y + 16); doc.text('Name:', W - M - 75, y + 16);
-        doc.text('Date:', M, y + 22); doc.text('Date:', W - M - 75, y + 22);
+        doc.text('Name:', M, y + 16);
+        doc.text('Date:', M, y + 22);
         doc.setTextColor(...DARK); y += 27;
       } else {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Tenant acknowledgement', M, y); y += 6;
@@ -1104,18 +1161,27 @@ ${isInv(r) ? `
         try { res = await api('gw-login', { method: 'POST', body: { email: em, password: pw } }); }
         catch (e2) { err.hidden = false; err.textContent = e2.status === 401 ? 'Email or password is not correct.' : e2.status === 429 ? (e2.message || 'Too many wrong passwords. Try again later.') : 'Server not reachable. Check the internet connection.'; return; }
         const u = res.user;
-        S.token = res.token; S.user = u.id; S.role = u.role;
+        S.token = res.token; S.user = u.id; S.role = isMgrRole(u.role) ? 'mgr' : 'staff';
         S.users = (S.users || []).filter(x => x.id !== u.id).concat([u]);
         save();
         await pullAll(true);
-        go(u.role === 'mgr' ? '#/mgr' : '#/staff');
+        go(isMgrRole(u.role) ? '#/mgr' : '#/staff');
         return;
       }
       const u = S.users.find(x => x.email.toLowerCase() === em.toLowerCase());
       if (!u || !u.pw || u.pw !== await pwHash(em, pw)) { err.hidden = false; err.textContent = 'Email or password is not correct.'; return; }
-      S.user = u.id; S.role = u.role; save(); go(u.role === 'mgr' ? '#/mgr' : '#/staff');
+      S.user = u.id; S.role = isMgrRole(u.role) ? 'mgr' : 'staff'; save(); go(isMgrRole(u.role) ? '#/mgr' : '#/staff');
     } finally { btn.disabled = false; }
   });
+  // Villa search (filters the list as you type) and sort order.
+  app.addEventListener('input', e => {
+    const t = e.target; if (!t.classList || !t.classList.contains('vsearch')) return;
+    const q = t.value.trim().toLowerCase(); let shown = 0;
+    app.querySelectorAll('[data-vname]').forEach(el => { const ok = !q || el.dataset.vname.indexOf(q) >= 0; el.hidden = !ok; el.style.display = ok ? '' : 'none'; if (ok) shown++; });
+    const none = app.querySelector(`[data-none="${t.dataset.list}"]`); if (none) none.hidden = shown > 0;
+  });
+  app.addEventListener('change', e => { if (e.target.classList && e.target.classList.contains('vsort')) { villaSort = e.target.value; render(true); } });
+  app.addEventListener('change', e => { if (e.target.id === 'newPfx') { const w = app.querySelector('.pfx'); if (w) w.classList.toggle('off', !e.target.checked); const n = document.getElementById('newVilla'); if (n) n.placeholder = e.target.checked ? 'e.g. Matahari' : 'e.g. The Ubud House'; } });
   app.addEventListener('change', e => {
     const t = e.target;
     if (t.matches('input[type=file][data-room]')) { addPhotos(t); return; }
@@ -1178,6 +1244,7 @@ ${isInv(r) ? `
     if (act === 'setPw') {
       const u = S.users.find(x => x.id === document.getElementById('cpUser').value), pw = document.getElementById('cpPw').value, err = document.getElementById('cpErr');
       if (!u || pw.length < 8) { err.hidden = false; err.textContent = 'The password needs at least 8 characters.'; return; }
+      if (u.role === 'admin' && !meAdmin()) { err.hidden = false; err.textContent = 'Only a Support Admin can change this password.'; return; }
       pwHash(u.email, pw).then(async h => { if (LIVE) u.pwNew = h; else u.pw = h; save(); await pushSettings(); toast(`Password changed for ${u.name}.`); render(true); });
     }
     else if (act === 'addUser') {
@@ -1186,11 +1253,12 @@ ${isInv(r) ? `
       if (S.users.some(u => u.email.toLowerCase() === em.toLowerCase())) { err.hidden = false; err.textContent = 'An account with this email already exists.'; return; }
       const pw = document.getElementById('nuPw').value;
       if (pw.length < 8) { err.hidden = false; err.textContent = 'The password needs at least 8 characters.'; return; }
-      const role = (document.getElementById('nuRole') || {}).value === 'mgr' ? 'mgr' : 'staff';
-      pwHash(em, pw).then(async h => { S.users.push(Object.assign({ id: uid(), name: n, email: em, role }, LIVE ? { pwNew: h } : { pw: h })); save(); await pushSettings(); toast(`${role === 'mgr' ? 'Manager' : 'Staff'} account created for ${n}. Tell them their password.`); render(); });
+      const rv = (document.getElementById('nuRole') || {}).value; const role = rv === 'admin' && meAdmin() ? 'admin' : rv === 'mgr' ? 'mgr' : 'staff';
+      pwHash(em, pw).then(async h => { S.users.push(Object.assign({ id: uid(), name: n, email: em, role }, LIVE ? { pwNew: h } : { pw: h })); save(); await pushSettings(); toast(`${ROLE_NAME[role]} account created for ${n}. Tell them their password.`); render(); });
     }
     else if (act === 'delUser') {
       if (b.dataset.u === S.user) { toast('You cannot remove your own account.'); return; }
+      if (!meAdmin() && (S.users.find(u => u.id === b.dataset.u) || {}).role === 'admin') { toast('Only a Support Admin can remove this account.'); return; }
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to remove'; return; }
       S.users = S.users.filter(u => u.id !== b.dataset.u); save(); pushSettings(); render(true);
     }
@@ -1273,7 +1341,9 @@ ${isInv(r) ? `
       if (probs.length) { err.hidden = false; err.textContent = probs.join(' '); return; }
       const z = dropZeroQty(r);
       if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'The list is empty.'; return; }
-      r.status = isInv(r) ? 'closed' : 'occupied'; r.inApprovedAt = Date.now(); save();
+      r.status = isInv(r) ? 'closed' : 'occupied'; r.inApprovedAt = Date.now();
+      const vv = villa(r.villaId); if (!isInv(r) && vv && vv.lease) { delete vv.lease; pushSettings(); }
+      save();
       toast(`${isInv(r) ? 'Inventory approved. The villa stays empty.' : 'Check-in approved.'}${z ? ` ${plural(z, 'item')} with quantity 0 removed.` : ''}`); render();
       pushRecord(r).catch(e2 => { if (e2.status !== 409) { r.status = 'checkin_pending'; delete r.inApprovedAt; delete r._dirty; save(); render(); } onSaveError(r, e2, 'Not approved: saving to the server failed. Check the connection and approve again.'); });
     }
@@ -1283,10 +1353,34 @@ ${isInv(r) ? `
       pushRecord(r).catch(e2 => { if (e2.status !== 409) { r.status = 'checkout_pending'; delete r.outApprovedAt; delete r._dirty; save(); render(); } onSaveError(r, e2, 'Not approved: saving to the server failed. Check the connection and approve again.'); });
     }
     else if (act === 'pdf') { if (!b.disabled) makePdf(rec(b.dataset.r), b.dataset.ph); }
+    else if (act === 'saveVilla' || act === 'clearLease') {
+      const v = villa(b.dataset.v); if (!v) return; const err = document.getElementById('vErr');
+      if (act === 'clearLease') {
+        if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to clear'; return; }
+        delete v.lease; save(); pushSettings(); toast('Lease details cleared.'); render(true); return;
+      }
+      const name = document.getElementById('vName').value.trim().replace(/\s+/g, ' ');
+      if (!name) { err.hidden = false; err.textContent = 'The villa needs a name.'; return; }
+      if (S.villas.some(x => x.id !== v.id && String(x.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `Another villa is already called ${name}.`; return; }
+      const L = {}; LEASE_F.forEach(([k]) => { const val = document.getElementById('L-' + k).value.trim(); if (val) L[k] = val; });
+      if (L.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(L.email)) { err.hidden = false; err.textContent = 'Enter a valid tenant email address, or leave it blank.'; return; }
+      if (L.checkIn && L.checkOut && L.checkOut <= L.checkIn) { err.hidden = false; err.textContent = 'The check-out date must be after the check-in date.'; return; }
+      v.name = name; v.area = document.getElementById('vArea').value.trim();
+      if (Object.keys(L).length) v.lease = L; else delete v.lease;
+      save(); pushSettings(); toast('Villa saved.'); render(true);
+    }
     else if (act === 'addVilla') {
-      const inp = document.getElementById('newVilla'); const name = inp.value.trim(); const err = document.getElementById('nvErr');
-      if (!name) { err.hidden = false; err.textContent = 'Type the villa name first.'; return; }
-      S.villas.push({ id: uid(), name, area: '' }); save(); pushSettings(); toast(`${name} added.`); render();
+      const inp = document.getElementById('newVilla'), err = document.getElementById('nvErr');
+      const pfx = (document.getElementById('newPfx') || {}).checked !== false;
+      let base = inp.value.trim().replace(/\s+/g, ' ');
+      if (pfx) base = base.replace(/^villa\s+/i, '');   // typed "Villa" anyway: don't double it
+      if (!base) { err.hidden = false; err.textContent = 'Type the villa name first.'; return; }
+      const name = pfx ? 'Villa ' + base : base;
+      if (S.villas.some(v => String(v.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `${name} already exists.`; return; }
+      // No rooms by default: the standard rooms start hidden and staff add the villa's own rooms.
+      const area = ((document.getElementById('newArea') || {}).value || '').trim();
+      const v = { id: uid(), name, area, createdAt: Date.now(), rooms: [], hideRooms: ROOMS.map(x => x.id) };
+      S.villas.push(v); save(); pushSettings(); toast(`${name} added.`); go('#/mgr/villa/' + v.id);
     }
     else if (act === 'reset') {
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Press again to reset everything'; return; }

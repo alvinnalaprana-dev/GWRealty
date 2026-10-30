@@ -86,6 +86,8 @@ function gwSettings(records, bootUsers) {
   return st ? st : { id: '_settings', status: 'settings', villas: [], users: bootUsers || [], _boot: true };
 }
 const gwPublicUser = u => ({ id: u.id, name: u.name, email: u.email, role: u.role });
+// Roles: 'admin' (Support Admin: can do everything; managers cannot remove, demote or reset it), 'mgr' (Manager: everything), 'staff' (inventories only).
+const gwIsMgr = role => role === 'mgr' || role === 'admin';
 
 /* Sign-in. `limits` is a small store kept by the server (n8n workflow static data) for the
    wrong-password lock: 5 wrong passwords for one email lock that email for 15 minutes. */
@@ -128,8 +130,12 @@ const GW_PRIVATE = ['phone', 'email', 'idNo', 'notes'];
 function gwList(records, who) {
   return records.filter(r => r && r.id).map(r => {
     const c = JSON.parse(JSON.stringify(r));
-    if (c.id === '_settings') { delete c._boot; c.users = who.role === 'mgr' ? (c.users || []).map(gwPublicUser) : []; }
-    else if (who.role !== 'mgr') GW_PRIVATE.forEach(k => delete c[k]);
+    if (c.id === '_settings') {
+      delete c._boot; c.users = gwIsMgr(who.role) ? (c.users || []).map(gwPublicUser) : [];
+      // Staff see a villa's upcoming tenant name and dates, never contact details or notes.
+      if (!gwIsMgr(who.role)) c.villas = (c.villas || []).map(v => { if (v && v.lease) GW_PRIVATE.forEach(k => delete v.lease[k]); return v; });
+    }
+    else if (!gwIsMgr(who.role)) GW_PRIVATE.forEach(k => delete c[k]);
     return c;
   }).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
 }
@@ -146,22 +152,28 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
   }
   if (r.id === '_settings') {
     const base = settings || { villas: [], users: [] };
-    if (who.role !== 'mgr') {
+    if (!gwIsMgr(who.role)) {
       // Staff may only add or hide rooms of existing villas (during an inventory).
       const villas = (base.villas || []).map(v => { const nv = (r.villas || []).find(x => x.id === v.id); return nv ? Object.assign({}, v, { rooms: nv.rooms || v.rooms, hideRooms: nv.hideRooms || v.hideRooms }) : v; });
       r.villas = villas; r.users = base.users || [];
     } else {
       // Keep stored password hashes; a new hash is only sent when a password is set or changed.
+      // A Support Admin account can only be changed, demoted or removed by a Support Admin.
+      const admin = who.role === 'admin', baseUsers = base.users || [];
       r.users = (r.users || []).map(u => {
-        const old = (base.users || []).find(x => x.id === u.id);
+        const old = baseUsers.find(x => x.id === u.id);
+        if (!admin && old && old.role === 'admin') return old;
         let pw = u.pw || (old && old.pw) || '';
         if (gwIsLegacy(pw)) pw = gwStorePw(pw);   // new password from the browser, or an old-format one
-        return { id: u.id, name: u.name, email: String(u.email || '').trim(), role: u.role === 'mgr' ? 'mgr' : 'staff', pw };
+        let role = ['admin', 'mgr', 'staff'].indexOf(u.role) >= 0 ? u.role : 'staff';
+        if (role === 'admin' && !admin) role = old ? old.role : 'mgr';
+        return { id: u.id, name: u.name, email: String(u.email || '').trim(), role, pw };
       });
-      if (!r.users.some(u => u.id === who.uid && u.role === 'mgr')) return { ok: false, status: 400, error: 'You cannot remove your own manager account.' };
+      if (!admin) baseUsers.filter(x => x.role === 'admin' && !r.users.some(u => u.id === x.id)).forEach(x => r.users.push(x));
+      if (!r.users.some(u => u.id === who.uid && gwIsMgr(u.role))) return { ok: false, status: 400, error: 'You cannot remove your own manager account.' };
     }
     r.status = 'settings';
-  } else if (who.role !== 'mgr') {
+  } else if (!gwIsMgr(who.role)) {
     // Staff may cancel their own draft: a check-in/inventory draft becomes 'cancelled', a check-out draft goes back to 'occupied'.
     // The server rebuilds the record from the stored copy, so nothing else can be changed this way.
     if (existing && existing.status === 'in_draft' && r.status === 'cancelled') {
@@ -193,4 +205,4 @@ function gwSplitJson(json) {
   const out = {}; GW_CHUNKS.forEach((k, i) => { out[k] = json.slice(i * GW_CHUNK, (i + 1) * GW_CHUNK); }); return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { gwSha256, gwHmac, gwPwHash, gwMakeToken, gwVerifyToken, gwHeader, gwSettings, gwLogin, gwWho, gwList, gwPrepareSave, gwPublicUser, gwJoinRow, gwSplitJson, gwStorePw, gwCheckPw, gwIsLegacy, gwPbkdf2 };
+if (typeof module !== 'undefined' && module.exports) module.exports = { gwSha256, gwHmac, gwPwHash, gwMakeToken, gwVerifyToken, gwHeader, gwSettings, gwLogin, gwWho, gwList, gwPrepareSave, gwPublicUser, gwJoinRow, gwSplitJson, gwStorePw, gwCheckPw, gwIsLegacy, gwPbkdf2, gwIsMgr };

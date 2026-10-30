@@ -19,6 +19,13 @@ Site: https://inventory.gwrealtyglobal.com (also https://gwrealty.netlify.app). 
 
 All screens and PDFs are in English (changed from Indonesian staff screens on 25 Oct 2026). Item names follow GW Realty's own inventory documents.
 
+## Roles and villas (added 30 Oct 2026)
+
+- **Roles:** Support Admin (Kriyator support: can do everything; only a Support Admin can change, demote or remove a Support Admin account), Manager (everything, and can also do inventories through "Staff view"), Staff (inventories on the phone only).
+- **Villas:** search and sort (name, newest, oldest) on the manager and staff lists. "Add villa" puts "Villa" in front of the name (can be unticked) and starts with no rooms; staff add the rooms during the first inventory.
+- **Villa page** (click a villa name): edit name and area, and enter the next lease (agreement no., tenant, contact, dates, notes) at any time. The next check-in is filled in from it; after the check-in is approved the villa's lease fields are cleared. Staff see the tenant name and dates only.
+- **Inventory Report PDF:** signed by the Owner / Agent / Listing representative only (no tenant, no second signature).
+
 ## Live system (config.js)
 
 Live since 26 Oct 2026 at https://inventory.gwrealtyglobal.com (gwrealty.netlify.app still works). The app talks only to the n8n workflows on the server: Claude AI, photos and PDFs in Google Drive, records in the Google Sheet. There is no demo mode any more; the old demo backend is kept in `dev/demo-backend.mjs` for local testing only and is not deployed.

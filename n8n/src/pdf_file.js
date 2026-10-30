@@ -3,7 +3,7 @@ const recs = gwRows($input.all());
 const wh = $('Webhook').first().json;
 const who = gwWho(gwHeader(wh.headers, 'x-gw-token'), recs, BOOT, SECRET);
 if (!who) return deny(401, 'Please sign in again.');
-if (who.role !== 'mgr') return deny(403, 'Only the manager can save reports.');
+if (!gwIsMgr(who.role)) return deny(403, 'Only the manager can save reports.');
 const b = wh.body || {};
 if (!b.data || !b.fileName) return deny(400, 'fileName and data are required');
 const data = String(b.data).replace(/^data:application\/pdf;(filename=[^;]*;)?base64,/, '').replace(/\s/g, '');
