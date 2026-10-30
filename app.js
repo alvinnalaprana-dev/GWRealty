@@ -79,6 +79,9 @@
   const L = () => 'en';
   const T = (id, en) => (L() === 'id' ? id : en);
   const villa = id => S.villas.find(v => v.id === id);
+  const liveVillas = () => S.villas.filter(v => !v.archived);   // removed properties are archived: hidden from lists, kept for the records' history
+  const vMeta = v => [v.type, v.area].filter(Boolean).map(esc).join(' · ');
+  let showRemoved = false;
   const pwHash = async (email, pw) => { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).toLowerCase().trim() + ':' + pw)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); };
   const curUser = () => (S.users || []).find(u => u.id === S.user);
   // Roles: 'admin' (Support Admin), 'mgr' (Manager), 'staff'. Admins and managers use the manager screens and may also use the staff screens.
@@ -396,7 +399,7 @@
 
   /* ---------- staff home ---------- */
   function viewStaffHome() {
-    const cards = sortVillas(S.villas).map(v => {
+    const cards = sortVillas(liveVillas()).map(v => {
       const r = activeRec(v.id);
       let status, info = '', btn = '';
       if (!r) { status = chip('', 'Empty'); info = (v.lease && (v.lease.tenant || v.lease.checkIn)) ? `Next tenant: ${esc(v.lease.tenant || '—')}${v.lease.checkIn ? ' · check-in ' + fmt(v.lease.checkIn) : ''}` : 'Ready for inventory or check-in'; btn = `<div class="row2"><button class="btn block ghost" data-act="startInv" data-v="${v.id}">Start inventory</button><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`; }
@@ -411,12 +414,12 @@
       }
       else if (r.status === 'out_draft') { status = chip('am', 'Check-out photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-out</a>`; }
       else if (r.status === 'checkout_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-out photos sent'; }
-      return `<div class="villa" data-in="staff" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
+      return `<div class="villa" data-in="staff" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><div class="top"><b>${esc(v.name)}${vMeta(v) ? `<br><small class="note">${vMeta(v)}</small>` : ''}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
     }).join('');
     app.innerHTML = `<div class="page narrow">
       <div class="head"><div><p class="eyebrow">Hello, ${esc((curUser() || {}).name || '')}</p><h1>Properties</h1></div></div>
       <p class="sub">Choose a property for an inventory, check-in or check-out. Just take photos; the item list is made automatically.</p>
-      ${villaTools('staff', S.villas.length)}
+      ${villaTools('staff', liveVillas().length)}
       <div class="vlist">${cards}</div>
       ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data is shared with the manager.' : 'Demo: data stays in this browser.'}</p>`}
     </div>`;
@@ -694,10 +697,10 @@
     return [7].map(n => { const d = addDays(co, -n); return { d: iso(d), n, sent: d <= today() }; });
   }
   function viewMgrHome() {
-    const rows = sortVillas(S.villas).map(v => {
+    const rows = sortVillas(liveVillas()).map(v => {
       const r = activeRec(v.id); const s = statusMgr(r); const L = v.lease || {};
       const next = !r && (L.tenant || L.agreement || L.checkIn) ? `<span class="note">Next: ${esc(L.tenant || L.agreement || 'lease')}${L.checkIn ? ' · ' + fmt(L.checkIn) : ''}</span>` : '';
-      return `<tr data-in="mgr" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><td><a class="vlink" href="#/mgr/villa/${v.id}"><b>${esc(v.name)}</b></a>${v.area ? `<br><span class="note">${esc(v.area)}</span>` : ''}</td>
+      return `<tr data-in="mgr" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><td><a class="vlink" href="#/mgr/villa/${v.id}"><b>${esc(v.name)}</b></a>${vMeta(v) ? `<br><span class="note">${vMeta(v)}</span>` : ''}</td>
         <td>${r && r.tenant ? esc(r.tenant) : next || '—'}${r && r.agreement ? `<br><span class="note">${esc(r.agreement)}</span>` : ''}</td>
         <td class="num">${r && r.checkIn && r.status !== 'in_draft' && r.status !== 'checkin_pending' ? fmt(r.checkIn) : '—'}</td>
         <td class="num">${r && r.checkOut ? fmt(r.checkOut) : '—'}</td>
@@ -728,11 +731,13 @@
       </table></div>` : '<p class="note">Completed check-outs will appear here.</p>';
     app.innerHTML = `<div class="page">
       <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Properties</h1></div><div class="row"><a class="btn ghost" href="#/staff">Do an inventory</a><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add property</a></div></div>
-      ${villaTools('mgr', S.villas.length)}
+      ${villaTools('mgr', liveVillas().length)}
       <div class="grid2">
         <div class="tbl"><table class="vt"><tr><th>Property</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
         <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'The server emails the manager at 08:00 WITA, 7 days before each check-out. Check the inbox to confirm delivery.' : 'In the live system an email goes to the manager 7 days before each check-out.'}</p></div>
       </div>
+      ${S.villas.some(v => v.archived) ? `<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">Removed properties (${S.villas.filter(v => v.archived).length})</h3><button class="btn ghost sm" data-act="toggleRemoved">${showRemoved ? 'Hide' : 'Show'}</button></div>
+        ${showRemoved ? `<div class="tbl"><table class="vt"><tr><th>Property</th><th>Removed</th><th></th></tr>${sortVillas(S.villas.filter(v => v.archived)).map(v => `<tr><td><b>${esc(v.name)}</b>${vMeta(v) ? `<br><span class="note">${vMeta(v)}</span>` : ''}</td><td class="num">${v.archivedAt ? fmt(iso(new Date(v.archivedAt))) : '—'}</td><td style="text-align:right"><button class="btn ghost sm" data-act="restoreVilla" data-v="${v.id}">Restore</button></td></tr>`).join('')}</table></div><p class="note">Their past inventories, check-ins and PDFs stay in the lists below.</p>` : ''}</div>` : ''}
       <div class="card"><h3>Completed</h3>${hist}</div>
       <div class="card"><h3>Inventories</h3>${invHist}</div>
       ${REAL ? '' : `<div class="row" style="justify-content:space-between">
@@ -750,9 +755,9 @@
       <p class="sub">A new property starts with no rooms: staff or the manager add the room names during the first inventory. Tenant and contract details can be added on the property's page at any time.</p>
       <div class="card">
         <div class="fld"><label for="newType">Type</label><select id="newType">${PTYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
-        <div class="fld"><label for="newVilla">Name</label><div class="pfx"><span id="pfxTxt">Villa</span><input id="newVilla" placeholder="e.g. Matahari" autocomplete="off"></div></div>
-        <p class="note" id="pfxNote">Do not type the word "Villa": it is added for you.</p>
-        <label class="chk"><input type="checkbox" id="newPfx"> No prefix: use the name exactly as typed</label>
+        <label class="chk"><input type="checkbox" id="newPfx"> No type</label>
+        <div class="fld"><label for="newVilla">Name</label><input id="newVilla" placeholder="e.g. Matahari" autocomplete="off"></div>
+        <p class="note">Type the name only. The type is shown next to it, so there is no need to write "Villa" or "House".</p>
         <div class="fld"><label for="newArea">Area <span class="opt">optional</span></label><input id="newArea" placeholder="e.g. Canggu" autocomplete="off"></div>
         <p class="err" role="alert" id="nvErr" hidden></p>
         <button class="btn" data-act="addVilla">Add property</button>
@@ -768,11 +773,12 @@
     const rooms = roomsFor(v.id);
     app.innerHTML = `<div class="page narrow form-page">
       <a href="#/mgr">← Properties</a>
-      <div class="head"><div><p class="eyebrow">Villa</p><h1>${esc(v.name)}</h1></div><span>${s.chip}</span></div>
+      <div class="head"><div><p class="eyebrow">${esc(v.type || 'Property')}${v.archived ? ' · removed' : ''}</p><h1>${esc(v.name)}</h1></div><span>${s.chip}</span></div>
       ${r ? `<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><p class="note" style="margin:0">${isInv(r) ? 'Inventory' : r.status === 'occupied' ? `Current tenant: ${esc(r.tenant || '—')} · check-out ${fmt(r.checkOut)}` : 'A record is open for this villa.'}</p>${s.act}</div></div>` : ''}
       <div class="card">
-        <h3>Villa details</h3>
+        <h3>Property details</h3>
         <div class="form">
+          <div class="fld"><label for="vType">Type</label><select id="vType"><option value="">No type</option>${PTYPES.map(t => `<option${v.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
           <div class="fld"><label for="vName">Name</label><input id="vName" value="${esc(v.name)}" autocomplete="off"></div>
           <div class="fld"><label for="vArea">Area <span class="opt">optional</span></label><input id="vArea" value="${esc(v.area || '')}" placeholder="e.g. Canggu" autocomplete="off"></div>
         </div>
@@ -785,6 +791,11 @@
       </div>
       <p class="err" role="alert" id="vErr" hidden></p>
       <div class="row"><button class="btn" data-act="saveVilla" data-v="${v.id}">Save</button>${v.lease ? `<button class="btn ghost" data-act="clearLease" data-v="${v.id}">Clear lease details</button>` : ''}</div>
+      <div class="card"><h3>${v.archived ? 'Restore property' : 'Remove property'}</h3>
+        ${v.archived ? `<p class="note">This property is removed: it is hidden from the lists and from staff phones.</p><div class="row"><button class="btn ghost" data-act="restoreVilla" data-v="${v.id}">Restore property</button></div>`
+        : r ? `<p class="note">This property cannot be removed while ${isInv(r) ? 'an inventory' : r.status === 'occupied' ? 'a tenant is in' : 'a check-in or check-out'} is open. Finish or discard it first.</p>`
+        : `<p class="note">Hides the property from the lists and from staff phones. Its past inventories, check-ins, check-outs and PDFs are kept, and it can be restored later.</p><div class="row"><button class="btn danger" data-act="removeVilla" data-v="${v.id}">Remove property</button></div>`}
+      </div>
     </div>`;
   }
 
@@ -1192,12 +1203,7 @@ ${isInv(r) ? `
   });
   app.addEventListener('change', e => { if (e.target.classList && e.target.classList.contains('vsort')) { villaSort = e.target.value; render(true); } });
   app.addEventListener('change', e => { if (e.target.classList && e.target.classList.contains('isort')) { invSort = e.target.value; render(true); } });
-  app.addEventListener('change', e => { if (e.target.id !== 'newPfx' && e.target.id !== 'newType') return;
-    const none = document.getElementById('newPfx').checked, t = document.getElementById('newType').value;
-    const w = app.querySelector('.pfx'); if (w) w.classList.toggle('off', none);
-    document.getElementById('pfxTxt').textContent = t; document.getElementById('newType').disabled = none;
-    const nt = document.getElementById('pfxNote'); if (nt) nt.textContent = none ? 'The name is saved exactly as you type it.' : `Do not type the word "${t}": it is added for you.`;
-    const n = document.getElementById('newVilla'); if (n) n.placeholder = none ? 'e.g. The Ubud House' : 'e.g. Matahari'; });
+  app.addEventListener('change', e => { if (e.target.id === 'newPfx') document.getElementById('newType').disabled = e.target.checked; });
   app.addEventListener('change', e => {
     const t = e.target;
     if (t.matches('input[type=file][data-room]')) { addPhotos(t); return; }
@@ -1369,6 +1375,18 @@ ${isInv(r) ? `
       pushRecord(r).catch(e2 => { if (e2.status !== 409) { r.status = 'checkout_pending'; delete r.outApprovedAt; delete r._dirty; save(); render(); } onSaveError(r, e2, 'Not approved: saving to the server failed. Check the connection and approve again.'); });
     }
     else if (act === 'pdf') { if (!b.disabled) makePdf(rec(b.dataset.r), b.dataset.ph); }
+    else if (act === 'toggleRemoved') { showRemoved = !showRemoved; render(true); }
+    else if (act === 'removeVilla' || act === 'restoreVilla') {
+      const v = villa(b.dataset.v); if (!v) return;
+      if (act === 'removeVilla') {
+        if (activeRec(v.id)) { toast('Finish or discard the open record first.'); return; }
+        if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to remove ' + v.name; return; }
+        v.archived = true; v.archivedAt = Date.now(); save(); pushSettings(); toast(`${v.name} removed.`); go('#/mgr'); render(true);
+      } else {
+        if (S.villas.some(x => x !== v && !x.archived && String(x.name).toLowerCase() === String(v.name).toLowerCase())) { toast(`Another property is already called ${v.name}. Rename that one first.`); return; }
+        delete v.archived; delete v.archivedAt; save(); pushSettings(); toast(`${v.name} restored.`); render(true);
+      }
+    }
     else if (act === 'saveVilla' || act === 'clearLease') {
       const v = villa(b.dataset.v); if (!v) return; const err = document.getElementById('vErr');
       if (act === 'clearLease') {
@@ -1377,11 +1395,12 @@ ${isInv(r) ? `
       }
       const name = document.getElementById('vName').value.trim().replace(/\s+/g, ' ');
       if (!name) { err.hidden = false; err.textContent = 'The villa needs a name.'; return; }
-      if (S.villas.some(x => x.id !== v.id && String(x.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `Another villa is already called ${name}.`; return; }
+      if (S.villas.some(x => x.id !== v.id && String(x.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `Another property is already called ${name}.`; return; }
       const L = {}; LEASE_F.forEach(([k]) => { const val = document.getElementById('L-' + k).value.trim(); if (val) L[k] = val; });
       if (L.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(L.email)) { err.hidden = false; err.textContent = 'Enter a valid tenant email address, or leave it blank.'; return; }
       if (L.checkIn && L.checkOut && L.checkOut <= L.checkIn) { err.hidden = false; err.textContent = 'The check-out date must be after the check-in date.'; return; }
       v.name = name; v.area = document.getElementById('vArea').value.trim();
+      const ty = (document.getElementById('vType') || {}).value || ''; if (ty) v.type = ty; else delete v.type;
       if (Object.keys(L).length) v.lease = L; else delete v.lease;
       save(); pushSettings(); toast('Villa saved.'); render(true);
     }
@@ -1389,13 +1408,12 @@ ${isInv(r) ? `
       const inp = document.getElementById('newVilla'), err = document.getElementById('nvErr');
       const none = !!(document.getElementById('newPfx') || {}).checked, type = (document.getElementById('newType') || {}).value || 'Villa';
       let base = inp.value.trim().replace(/\s+/g, ' ');
-      if (!none) base = base.replace(new RegExp('^' + type + '\\s+', 'i'), '');   // typed the type anyway: don't double it
       if (!base) { err.hidden = false; err.textContent = 'Type the property name first.'; return; }
-      const name = none ? base : type + ' ' + base;
-      if (S.villas.some(v => String(v.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `${name} already exists.`; return; }
+      const name = base;
+      if (S.villas.some(v => !v.archived && String(v.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `${name} already exists.`; return; }
       // No rooms by default: the standard rooms start hidden and staff add the villa's own rooms.
       const area = ((document.getElementById('newArea') || {}).value || '').trim();
-      const v = { id: uid(), name, area, createdAt: Date.now(), rooms: [], hideRooms: ROOMS.map(x => x.id) };
+      const v = { id: uid(), name, area, createdAt: Date.now(), rooms: [], hideRooms: ROOMS.map(x => x.id) }; if (!none) v.type = type;
       S.villas.push(v); save(); pushSettings(); toast(`${name} added.`); go('#/mgr/villa/' + v.id);
     }
     else if (act === 'reset') {

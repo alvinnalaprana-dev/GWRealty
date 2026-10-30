@@ -63,7 +63,8 @@ const overdue = occupied.filter(r => r.checkOut && r.checkOut.slice(0, 10) < tod
 const waiting = records.filter(r => r.status === 'checkin_pending' || r.status === 'checkout_pending').map(r => ({ villa: vName(r.villaId), what: isInv(r) ? 'Inventory' : r.status === 'checkin_pending' ? 'Check-in' : 'Check-out' }));
 const stale = records.filter(r => (r.status === 'in_draft' || r.status === 'out_draft') && r.createdAt && Date.now() - r.createdAt > 3 * 864e5).map(r => ({ villa: vName(r.villaId), what: isInv(r) ? 'Inventory' : r.status === 'in_draft' ? 'Check-in' : 'Check-out' }));
 const withBaseline = new Set(records.filter(r => r.inApprovedAt).map(r => r.villaId));
-const noInventory = villas.filter(v => !withBaseline.has(v.id)).map(v => v.name);
+const liveVillas = villas.filter(v => !v.archived);   // removed properties are not counted
+const noInventory = liveVillas.filter(v => !withBaseline.has(v.id)).map(v => v.name);
 
 // Items with problems at two or more check-outs (all time), per villa.
 const rep = {};
@@ -74,7 +75,7 @@ const totals = {
   inventories: inventories.length, checkIns: checkIns.length, checkOuts: checkOuts.length,
   damaged: coDetail.reduce((a, c) => a + c.damaged, 0), worn: coDetail.reduce((a, c) => a + c.worn, 0), moved: coDetail.reduce((a, c) => a + c.moved, 0),
   cost: coDetail.reduce((a, c) => a + c.cost, 0), unpriced: coDetail.reduce((a, c) => a + c.unpriced, 0),
-  villas: villas.length, occupied: occupied.length,
+  villas: liveVillas.length, occupied: occupied.length,
 };
 const data = { period: `${fmt(start)} – ${fmt(end)}`, start, end, totals,
   inventories: inventories.map(r => ({ villa: vName(r.villaId), date: fmt(r.invDate) })),
