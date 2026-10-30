@@ -85,12 +85,13 @@
   const isMgrRole = role => role === 'mgr' || role === 'admin';
   const meAdmin = () => (curUser() || {}).role === 'admin';
   const ROLE_NAME = { admin: 'Support Admin', mgr: 'Manager', staff: 'Staff' };
+  let invSort = 'new';   // inventories log order: 'new' | 'old' | 'name'
   let villaSort = 'name';   // villa list order: 'name' | 'new' | 'old'
   const sortVillas = list => { const l = list.slice(); const idx = v => S.villas.indexOf(v);
     if (villaSort === 'name') l.sort((a, b) => String(a.name).localeCompare(String(b.name), 'en', { sensitivity: 'base' }));
     else l.sort((a, b) => ((a.createdAt || 0) - (b.createdAt || 0)) || (idx(a) - idx(b)));
     if (villaSort === 'new') l.reverse(); return l; };
-  const villaTools = (id, n) => n < 2 ? '' : `<div class="vtools"><input type="search" class="vsearch" data-list="${id}" placeholder="Search villas…" aria-label="Search villas" autocomplete="off">
+  const villaTools = (id, n) => n < 2 ? '' : `<div class="vtools"><input type="search" class="vsearch" data-list="${id}" placeholder="Search properties…" aria-label="Search properties" autocomplete="off">
     <select class="vsort" aria-label="Sort villas"><option value="name"${villaSort === 'name' ? ' selected' : ''}>Name A–Z</option><option value="new"${villaSort === 'new' ? ' selected' : ''}>Newest added</option><option value="old"${villaSort === 'old' ? ' selected' : ''}>Oldest added</option></select></div>
     <p class="note vnone" data-none="${id}" hidden>No villa matches your search.</p>`;
   const rec = id => S.records.find(r => r.id === id);
@@ -365,7 +366,7 @@
     const rows = S.users.map(u => `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.email)}</td><td>${u.role === 'admin' ? chip('ai', 'Support Admin') : u.role === 'mgr' ? chip('ok', 'Manager') : chip('', 'Staff')}</td>
       <td style="text-align:right">${u.id === S.user ? '<span class="note">You</span>' : canEdit(u) ? `<button class="btn ghost sm" data-act="delUser" data-u="${u.id}">Remove</button>` : '<span class="note">Protected</span>'}</td></tr>`).join('');
     app.innerHTML = `<div class="page narrow">
-      <a href="#/mgr">← Villas</a>
+      <a href="#/mgr">← Properties</a>
       <div class="head"><div><p class="eyebrow">Accounts</p><h1>Team</h1></div></div>
       <p class="sub">Managers add villas, review every inventory and manage accounts, and can also do inventories themselves (Staff view). Staff only do inventories on their phone. Create an account for each person and tell them their password. The Support Admin account (Kriyator support) can do everything and can only be changed by a Support Admin, so access can always be restored.</p>
       <div class="tbl"><table class="vt"><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>${rows}</table></div>
@@ -410,11 +411,11 @@
       }
       else if (r.status === 'out_draft') { status = chip('am', 'Check-out photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-out</a>`; }
       else if (r.status === 'checkout_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-out photos sent'; }
-      return `<div class="villa" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
+      return `<div class="villa" data-in="staff" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><div class="top"><b>${esc(v.name)}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
     }).join('');
     app.innerHTML = `<div class="page narrow">
-      <div class="head"><div><p class="eyebrow">Hello, ${esc((curUser() || {}).name || '')}</p><h1>Villas</h1></div></div>
-      <p class="sub">Choose a villa for an inventory, check-in or check-out. Just take photos; the item list is made automatically.</p>
+      <div class="head"><div><p class="eyebrow">Hello, ${esc((curUser() || {}).name || '')}</p><h1>Properties</h1></div></div>
+      <p class="sub">Choose a property for an inventory, check-in or check-out. Just take photos; the item list is made automatically.</p>
       ${villaTools('staff', S.villas.length)}
       <div class="vlist">${cards}</div>
       ${REAL ? '' : `<p class="note">${LIVE ? 'Demo: data is shared with the manager.' : 'Demo: data stays in this browser.'}</p>`}
@@ -499,17 +500,18 @@
       <a href="${home}">← Back</a>
       <div class="head"><div><p class="eyebrow">${isInv(r) ? 'Inventory' : phase === 'in' ? 'Check-in inventory' : 'Check-out'}</p><h1>${esc(v.name)}</h1></div></div>
       <div class="card"><div class="fld"><label for="f-inv">Inventory date</label><input id="f-inv" type="date" data-f="${dKey}" value="${esc(r[dKey] || '')}"></div>
-        <p class="note">${isInv(r) ? 'The date of this inventory.' : phase === 'in' ? 'Can differ from the tenant\'s check-in date.' : 'The date of the check-out inspection.'}</p></div>
+        <p class="note">${isInv(r) ? 'The date of this inventory.' : phase === 'in' ? 'Can differ from the tenant\'s check-in date.' : 'The date of the check-out inspection.'}</p>
+        ${phase === 'in' && !isInv(r) ? `<div class="fld"><label for="f-ten">Tenant name</label><input id="f-ten" data-f="tenant" value="${esc(r.tenant || '')}" placeholder="Tenant name, as on their ID" autocomplete="off"></div>
+        <p class="note">${v.lease && v.lease.tenant ? `Expected from the contract: <b>${esc(v.lease.tenant)}</b>. Check it matches the person checking in.` : 'For the manager to double-check against the contract.'}</p>` : ''}</div>
       <p class="sub">Photograph every room. The AI lists the items in each room; check and correct the list before sending it to the manager.</p>
-      ${phase === 'in' && !capRooms(r, phase).length ? '<div class="banner">This villa has no rooms yet. Add its rooms under "Add a room" below (tap a suggestion or type a name), then photograph each one.</div>' : ''}
+      ${phase === 'in' && !capRooms(r, phase).length ? '<div class="banner">This property has no rooms yet. Type each room name under "Add a room" below, then photograph each one.</div>' : ''}
       ${phase === 'out' ? `<div class="banner">Take the photos from the same angles as the check-in photos.</div>` : ''}
       <p class="note" id="busy" aria-live="polite" hidden></p>
       ${rooms}
       ${phase === 'in' ? `<div class="card addroom">
         <h3>Add a room or miscellaneous items</h3>
-        <div class="sugg">${ROOMS.map(x => [x.en, x.en]).concat(ROOM_SUGGEST).filter(([en], i, a) => a.findIndex(y => y[0] === en) === i).filter(([en]) => !roomsFor(r.villaId).some(x => x.en === en)).map(([en, idn]) => `<button class="chipbtn" data-act="addRoom" data-v="${r.villaId}" data-name="${en}" data-name-id="${idn}">+ ${idn}</button>`).join('')}</div>
-        <div class="row"><input id="newRoom" placeholder="Other room name, e.g. Bedroom 4" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Add</button></div>
-        <p class="note">New rooms are saved for this villa and appear again at the next check-in and check-out.</p>
+        <div class="row"><input id="newRoom" placeholder="Type a room name" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}">+ Add</button></div>
+        <p class="note">New rooms are saved for this property and appear again at the next check-in and check-out.</p>
       </div>` : ''}
       <p style="text-align:center;margin:14px 0 4px"><button class="linkbtn cancelDraft" data-act="cancelDraft" data-r="${r.id}">Cancel this ${isInv(r) ? 'inventory' : phase === 'in' ? 'check-in' : 'check-out'}</button></p>
       <div class="sticky">
@@ -695,7 +697,7 @@
     const rows = sortVillas(S.villas).map(v => {
       const r = activeRec(v.id); const s = statusMgr(r); const L = v.lease || {};
       const next = !r && (L.tenant || L.agreement || L.checkIn) ? `<span class="note">Next: ${esc(L.tenant || L.agreement || 'lease')}${L.checkIn ? ' · ' + fmt(L.checkIn) : ''}</span>` : '';
-      return `<tr data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><td><a class="vlink" href="#/mgr/villa/${v.id}"><b>${esc(v.name)}</b></a>${v.area ? `<br><span class="note">${esc(v.area)}</span>` : ''}</td>
+      return `<tr data-in="mgr" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><td><a class="vlink" href="#/mgr/villa/${v.id}"><b>${esc(v.name)}</b></a>${v.area ? `<br><span class="note">${esc(v.area)}</span>` : ''}</td>
         <td>${r && r.tenant ? esc(r.tenant) : next || '—'}${r && r.agreement ? `<br><span class="note">${esc(r.agreement)}</span>` : ''}</td>
         <td class="num">${r && r.checkIn && r.status !== 'in_draft' && r.status !== 'checkin_pending' ? fmt(r.checkIn) : '—'}</td>
         <td class="num">${r && r.checkOut ? fmt(r.checkOut) : '—'}</td>
@@ -708,20 +710,27 @@
       return `<div class="tg"><b>⏰ ${esc(villa(r.villaId).name)}</b>Check-out ${fmt(r.checkOut)}${d >= 0 ? ` · in ${d} day${d === 1 ? '' : 's'}` : ' · overdue'}<br><small>Email to manager: ${rs}</small></div>`;
     }).join('') : '<p class="note">No upcoming check-outs.</p>';
     const closed = S.records.filter(r => r.status === 'closed' && !isInv(r)).sort((a, b) => (b.outApprovedAt || 0) - (a.outApprovedAt || 0));
-    const invs = S.records.filter(r => r.status === 'closed' && isInv(r)).sort((a, b) => (b.inApprovedAt || 0) - (a.inApprovedAt || 0));
-    const invHist = invs.length ? `<div class="tbl"><table class="vt"><tr><th>Villa</th><th>Inventory date</th><th>Items</th><th></th></tr>
-      ${invs.map(r => `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td class="num">${fmt(r.invDate)}</td><td>${plural(Object.values(r.inItems || {}).reduce((a, l) => a + l.length, 0), 'item')}</td>
-      <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Inventory PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`).join('')}
-      </table></div>` : '<p class="note">Approved inventories will appear here.</p>';
-    const hist = closed.length ? `<div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Changes</th><th></th></tr>
+    const invs = S.records.filter(r => isInv(r));
+    const invAt = r => r.inApprovedAt || r.cancelledAt || parse(r.invDate || '') || 0;
+    if (invSort === 'name') invs.sort((x, y) => String(villa(x.villaId).name).localeCompare(String(villa(y.villaId).name), 'en', { sensitivity: 'base' }) || String(y.invDate || '').localeCompare(String(x.invDate || '')));
+    else invs.sort((x, y) => { const d = String(x.invDate || '').localeCompare(String(y.invDate || '')) || (+invAt(x) - +invAt(y)); return invSort === 'old' ? d : -d; });
+    const invSt = r => r.status === 'closed' ? chip('ok', 'Approved') : r.status === 'checkin_pending' ? chip('am', 'To review') : r.status === 'in_draft' ? chip('am', 'Staff doing inventory') : r.status === 'cancelled' ? chip('', 'Cancelled') : chip('', esc(r.status || ''));
+    const invAct = r => r.status === 'closed' ? `<button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Inventory PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a>` : r.status === 'checkin_pending' ? `<a class="btn sm" href="#/mgr/rec/${r.id}">Review</a>` : '';
+    const invHist = invs.length ? `${invs.length > 1 ? `<div class="vtools"><input type="search" class="vsearch" data-list="inv" placeholder="Search inventories by property…" aria-label="Search inventories" autocomplete="off">
+      <select class="isort" aria-label="Sort inventories"><option value="new"${invSort === 'new' ? ' selected' : ''}>Newest first</option><option value="old"${invSort === 'old' ? ' selected' : ''}>Oldest first</option><option value="name"${invSort === 'name' ? ' selected' : ''}>Property A–Z</option></select></div>` : ''}
+      <div class="tbl"><table class="vt"><tr><th>Property</th><th>Inventory date</th><th>Items</th><th>Status</th><th></th></tr>
+      ${invs.map(r => `<tr data-in="inv" data-vname="${esc(String(villa(r.villaId).name || '').toLowerCase())}"><td><b>${esc(villa(r.villaId).name || '—')}</b></td><td class="num">${r.invDate ? fmt(r.invDate) : '—'}</td><td>${plural(Object.values(r.inItems || {}).reduce((a, l) => a + (l || []).length, 0), 'item')}</td><td>${invSt(r)}</td>
+      <td style="text-align:right"><div class="row" style="justify-content:flex-end">${invAct(r)}</div></td></tr>`).join('')}
+      </table></div>` : '<p class="note">Inventories will appear here.</p>';
+    const hist = closed.length ? `<div class="tbl"><table class="vt"><tr><th>Property</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Changes</th><th></th></tr>
       ${closed.map(r => { const c = changes(r).length; return `<tr><td><b>${esc(villa(r.villaId).name)}</b></td><td>${esc(r.tenant || '—')}</td><td class="num">${fmt(r.checkIn)}</td><td class="num">${fmt(r.checkOut)}</td><td>${c ? chip('am', `${c} change${c === 1 ? '' : 's'}`) : chip('ok', 'None')}</td>
       <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="in">Check-in PDF</button><button class="btn ghost sm" data-act="pdf" data-r="${r.id}" data-ph="out">Check-out PDF</button><a class="btn ghost sm" href="#/mgr/rec/${r.id}">Open</a></div></td></tr>`; }).join('')}
       </table></div>` : '<p class="note">Completed check-outs will appear here.</p>';
     app.innerHTML = `<div class="page">
-      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Villas</h1></div><div class="row"><a class="btn ghost" href="#/staff">Do an inventory</a><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add villa</a></div></div>
+      <div class="head"><div><p class="eyebrow">GW Realty</p><h1>Properties</h1></div><div class="row"><a class="btn ghost" href="#/staff">Do an inventory</a><a class="btn ghost" href="#/mgr/team">Team</a><a class="btn" href="#/mgr/new">+ Add property</a></div></div>
       ${villaTools('mgr', S.villas.length)}
       <div class="grid2">
-        <div class="tbl"><table class="vt"><tr><th>Villa</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
+        <div class="tbl"><table class="vt"><tr><th>Property</th><th>Tenant</th><th>Check-in</th><th>Check-out</th><th>Status</th><th></th></tr>${rows}</table></div>
         <div class="card"><h3>Check-out reminders</h3><div class="rem">${rem}</div><p class="note">${REAL ? 'The server emails the manager at 08:00 WITA, 7 days before each check-out. Check the inbox to confirm delivery.' : 'In the live system an email goes to the manager 7 days before each check-out.'}</p></div>
       </div>
       <div class="card"><h3>Completed</h3>${hist}</div>
@@ -733,22 +742,23 @@
     </div>`;
   }
 
+  const PTYPES = ['Villa', 'House', 'Condominium', 'Shophouse'];
   function viewNew() {
-    app.innerHTML = `<div class="page narrow">
-      <a href="#/mgr">← Villas</a>
-      <div class="head"><div><p class="eyebrow">Setup</p><h1>Add a villa</h1></div></div>
-      <p class="sub">A new villa starts with no rooms: staff add the room names during the first inventory. Tenant and contract details can be added on the villa's page at any time.</p>
+    app.innerHTML = `<div class="page narrow form-page">
+      <a href="#/mgr">← Properties</a>
+      <div class="head"><div><p class="eyebrow">Setup</p><h1>Add a property</h1></div></div>
+      <p class="sub">A new property starts with no rooms: staff or the manager add the room names during the first inventory. Tenant and contract details can be added on the property's page at any time.</p>
       <div class="card">
-        <div class="fld"><label for="newVilla">Villa name</label><div class="pfx"><span id="pfxTxt">Villa</span><input id="newVilla" placeholder="e.g. Matahari" autocomplete="off"></div></div>
-        <p class="note">Do not type the word "Villa": it is added for you.</p>
-        <label class="chk"><input type="checkbox" id="newPfx" checked> Put "Villa" in front of the name (untick for a property that is not called Villa)</label>
+        <div class="fld"><label for="newType">Type</label><select id="newType">${PTYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
+        <div class="fld"><label for="newVilla">Name</label><div class="pfx"><span id="pfxTxt">Villa</span><input id="newVilla" placeholder="e.g. Matahari" autocomplete="off"></div></div>
+        <p class="note" id="pfxNote">Do not type the word "Villa": it is added for you.</p>
+        <label class="chk"><input type="checkbox" id="newPfx"> No prefix: use the name exactly as typed</label>
         <div class="fld"><label for="newArea">Area <span class="opt">optional</span></label><input id="newArea" placeholder="e.g. Canggu" autocomplete="off"></div>
         <p class="err" role="alert" id="nvErr" hidden></p>
-        <button class="btn" data-act="addVilla">Add villa</button>
+        <button class="btn" data-act="addVilla">Add property</button>
       </div>
     </div>`;
   }
-
 
   /* ---------- villa page (manager): edit villa, upcoming lease details, any time ---------- */
   const LEASE_F = [['agreement', 'Agreement / contract no.', 'text', 'e.g. GWR-AG-2026-031'], ['tenant', 'Tenant name', 'text', 'Tenant name'], ['phone', 'Phone', 'text', '+62…'], ['email', 'Email', 'email', 'tenant@email.com'], ['idNo', 'Passport / ID no.', 'text', ''], ['checkIn', 'Check-in date', 'date', ''], ['checkOut', 'Check-out date', 'date', ''], ['notes', 'Notes', 'text', 'e.g. deposit amount, agent']];
@@ -756,8 +766,8 @@
     const v = villa(id); if (!v) { go('#/mgr'); return; }
     const r = activeRec(v.id), L = v.lease || {}, s = statusMgr(r);
     const rooms = roomsFor(v.id);
-    app.innerHTML = `<div class="page narrow">
-      <a href="#/mgr">← Villas</a>
+    app.innerHTML = `<div class="page narrow form-page">
+      <a href="#/mgr">← Properties</a>
       <div class="head"><div><p class="eyebrow">Villa</p><h1>${esc(v.name)}</h1></div><span>${s.chip}</span></div>
       ${r ? `<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><p class="note" style="margin:0">${isInv(r) ? 'Inventory' : r.status === 'occupied' ? `Current tenant: ${esc(r.tenant || '—')} · check-out ${fmt(r.checkOut)}` : 'A record is open for this villa.'}</p>${s.act}</div></div>` : ''}
       <div class="card">
@@ -874,7 +884,7 @@
     }).join('');
     const rem = remindersFor(r).map(x => `email on ${fmt(x.d)} (7 days before${x.sent ? (REAL ? ', date passed' : ', simulated') : ''})`).join(' · ');
     app.innerHTML = `<div class="page">
-      <a href="#/mgr">← Villas</a>
+      <a href="#/mgr">← Properties</a>
       <div class="head"><div><p class="eyebrow">${isInv(r) ? (edit ? 'Inventory review' : 'Inventory · approved') : edit ? 'Check-in review' : 'Check-in · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <div class="card"><div class="form">
         <div class="fld"><label for="f-villa">Villa</label><input id="f-villa" value="${esc(v.name)}" readonly></div>
@@ -941,7 +951,7 @@ ${isInv(r) ? `
       </div>`;
     }).join('');
     app.innerHTML = `<div class="page">
-      <a href="#/mgr">← Villas</a>
+      <a href="#/mgr">← Properties</a>
       <div class="head"><div><p class="eyebrow">${edit ? 'Check-out review' : 'Check-out · approved'}</p><h1>${esc(v.name)}</h1></div>${edit ? chip('am', 'Waiting for approval') : chip('ok', 'Approved')}</div>
       <p class="sub">Agreement <b>${esc(r.agreement || '—')}</b> · Tenant: <b>${esc(r.tenant || '—')}</b> · ${fmt(r.checkIn)} to ${fmt(r.checkOut)} · Check-out inventory ${fmt(r.outInvDate)}</p>
       ${edit ? `<div class="banner ai"><b>AI compared ${nPh} new photo${nPh === 1 ? '' : 's'} with the check-in list (${nItems} items${nNew ? `, plus ${nNew} item${nNew === 1 ? '' : 's'} not at check-in` : ''}) and staff checked the result.</b> ${ch.length} change${ch.length === 1 ? '' : 's'}. Correct if needed, then approve. Items already worn or damaged at check-in are not counted again.</div>` : ''}
@@ -1177,11 +1187,17 @@ ${isInv(r) ? `
   app.addEventListener('input', e => {
     const t = e.target; if (!t.classList || !t.classList.contains('vsearch')) return;
     const q = t.value.trim().toLowerCase(); let shown = 0;
-    app.querySelectorAll('[data-vname]').forEach(el => { const ok = !q || el.dataset.vname.indexOf(q) >= 0; el.hidden = !ok; el.style.display = ok ? '' : 'none'; if (ok) shown++; });
+    app.querySelectorAll(`[data-in="${t.dataset.list}"]`).forEach(el => { const ok = !q || el.dataset.vname.indexOf(q) >= 0; el.hidden = !ok; el.style.display = ok ? '' : 'none'; if (ok) shown++; });
     const none = app.querySelector(`[data-none="${t.dataset.list}"]`); if (none) none.hidden = shown > 0;
   });
   app.addEventListener('change', e => { if (e.target.classList && e.target.classList.contains('vsort')) { villaSort = e.target.value; render(true); } });
-  app.addEventListener('change', e => { if (e.target.id === 'newPfx') { const w = app.querySelector('.pfx'); if (w) w.classList.toggle('off', !e.target.checked); const n = document.getElementById('newVilla'); if (n) n.placeholder = e.target.checked ? 'e.g. Matahari' : 'e.g. The Ubud House'; } });
+  app.addEventListener('change', e => { if (e.target.classList && e.target.classList.contains('isort')) { invSort = e.target.value; render(true); } });
+  app.addEventListener('change', e => { if (e.target.id !== 'newPfx' && e.target.id !== 'newType') return;
+    const none = document.getElementById('newPfx').checked, t = document.getElementById('newType').value;
+    const w = app.querySelector('.pfx'); if (w) w.classList.toggle('off', none);
+    document.getElementById('pfxTxt').textContent = t; document.getElementById('newType').disabled = none;
+    const nt = document.getElementById('pfxNote'); if (nt) nt.textContent = none ? 'The name is saved exactly as you type it.' : `Do not type the word "${t}": it is added for you.`;
+    const n = document.getElementById('newVilla'); if (n) n.placeholder = none ? 'e.g. The Ubud House' : 'e.g. Matahari'; });
   app.addEventListener('change', e => {
     const t = e.target;
     if (t.matches('input[type=file][data-room]')) { addPhotos(t); return; }
@@ -1371,11 +1387,11 @@ ${isInv(r) ? `
     }
     else if (act === 'addVilla') {
       const inp = document.getElementById('newVilla'), err = document.getElementById('nvErr');
-      const pfx = (document.getElementById('newPfx') || {}).checked !== false;
+      const none = !!(document.getElementById('newPfx') || {}).checked, type = (document.getElementById('newType') || {}).value || 'Villa';
       let base = inp.value.trim().replace(/\s+/g, ' ');
-      if (pfx) base = base.replace(/^villa\s+/i, '');   // typed "Villa" anyway: don't double it
-      if (!base) { err.hidden = false; err.textContent = 'Type the villa name first.'; return; }
-      const name = pfx ? 'Villa ' + base : base;
+      if (!none) base = base.replace(new RegExp('^' + type + '\\s+', 'i'), '');   // typed the type anyway: don't double it
+      if (!base) { err.hidden = false; err.textContent = 'Type the property name first.'; return; }
+      const name = none ? base : type + ' ' + base;
       if (S.villas.some(v => String(v.name).toLowerCase() === name.toLowerCase())) { err.hidden = false; err.textContent = `${name} already exists.`; return; }
       // No rooms by default: the standard rooms start hidden and staff add the villa's own rooms.
       const area = ((document.getElementById('newArea') || {}).value || '').trim();

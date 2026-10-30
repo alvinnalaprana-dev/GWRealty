@@ -275,3 +275,12 @@ input.nm.missing{border-color:var(--red);background:var(--red-soft)}
 .pfx.off span{display:none}
 .chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--body)}
 .chk input{margin-top:2px}
+/* Desktop: staff, capture and property pages use the screen width instead of a phone-width column. */
+@media (min-width:861px){
+  .page.narrow{max-width:1000px}
+  .page.narrow.form-page{max-width:720px}
+  .vlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .vlist .villa{justify-content:space-between}
+}
+@media (min-width:1180px){.page.narrow{max-width:1120px}.page.narrow.form-page{max-width:760px}}
+select:disabled{opacity:.5}
