@@ -284,3 +284,11 @@ input.nm.missing{border-color:var(--red);background:var(--red-soft)}
 }
 @media (min-width:1180px){.page.narrow{max-width:1120px}.page.narrow.form-page{max-width:760px}}
 select:disabled{opacity:.5}
+/* AI check, item order buttons */
+.aicta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:8px}
+.aicta .note{flex:1 1 200px}
+.aidone{margin-top:6px}
+.ops{display:flex;gap:2px;justify-content:flex-end;align-items:center}
+.ops .mv{border:1px solid var(--line2);background:#fff;color:var(--ink);border-radius:6px;font-size:14px;line-height:1;padding:5px 7px;cursor:pointer}
+.ops .mv:hover{background:var(--soft)}
+@media (max-width:640px){.ops .mv{font-size:16px;padding:7px 9px}}

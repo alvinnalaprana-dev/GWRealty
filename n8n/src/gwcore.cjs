@@ -179,6 +179,13 @@ function gwPrepareSave(record, existing, settings, who, nowIso) {
     if (existing && existing.status === 'in_draft' && r.status === 'cancelled') {
       return { ok: true, status: 200, record: Object.assign(JSON.parse(JSON.stringify(existing)), { status: 'cancelled', cancelledAt: r.cancelledAt || Date.now(), updatedAt: nowIso || new Date().toISOString() }) };
     }
+    // Staff may take a sent record back to edit until the manager approves it (everything stored is kept, including manager edits).
+    if (existing && existing.status === 'checkin_pending' && r.status === 'in_draft') {
+      return { ok: true, status: 200, record: Object.assign(JSON.parse(JSON.stringify(existing)), { status: 'in_draft', updatedAt: nowIso || new Date().toISOString() }) };
+    }
+    if (existing && existing.status === 'checkout_pending' && r.status === 'out_draft') {
+      return { ok: true, status: 200, record: Object.assign(JSON.parse(JSON.stringify(existing)), { status: 'out_draft', updatedAt: nowIso || new Date().toISOString() }) };
+    }
     if (existing && existing.status === 'out_draft' && r.status === 'occupied') {
       return { ok: true, status: 200, record: Object.assign(JSON.parse(JSON.stringify(existing)), { status: 'occupied', outItems: null, outPhotos: {}, outInvDate: '', updatedAt: nowIso || new Date().toISOString() }) };
     }

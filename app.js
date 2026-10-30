@@ -30,6 +30,14 @@
   const daysUntil = s => Math.round((parse(s) - today()) / 864e5);
   const allRooms = () => ROOMS.concat(...((S && S.villas) || []).map(v => v.rooms || []));
   const roomName = (id) => { const r = allRooms().find(x => x.id === id); return r ? r.en : id; };   // all screens are in English (22 Oct 2026)
+  // The latest approved inventory of a property: a new check-in starts from its items and photos.
+  const lastInv = vid => S.records.filter(x => x.villaId === vid && x.kind === 'inv' && x.status === 'closed').sort((a, b) => (b.inApprovedAt || 0) - (a.inApprovedAt || 0))[0] || null;
+  function fillFromInv(r, inv) {
+    r.inItems = {}; r.inPhotos = {}; r.photoFiles = {}; r.aiRead = {}; r.aiState = {};
+    Object.keys(inv.inItems || {}).forEach(k => { r.inItems[k] = (inv.inItems[k] || []).map(i => Object.assign({}, i, { id: uid() })); });
+    Object.keys(inv.inPhotos || {}).forEach(k => { r.inPhotos[k] = (inv.inPhotos[k] || []).filter(pid => (inv.photoFiles || {})[pid]); r.inPhotos[k].forEach(pid => { r.photoFiles[pid] = inv.photoFiles[pid]; r.aiRead[pid] = 1; }); r.aiState['in:' + k] = 'ok'; });
+    r.fromInv = inv.id; r.fromInvDate = inv.invDate || ''; if (inv.mgrRooms) r.mgrRooms = inv.mgrRooms.slice();
+  }
   const roomsFor = vid => { const v = (S.villas || []).find(x => x.id === vid) || {}; const hide = v.hideRooms || []; return ROOMS.filter(x => hide.indexOf(x.id) < 0).concat(v.rooms || []); };
   const roomObj = id => allRooms().find(x => x.id === id);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -402,9 +410,9 @@
     const cards = sortVillas(liveVillas()).map(v => {
       const r = activeRec(v.id);
       let status, info = '', btn = '';
-      if (!r) { status = chip('', 'Empty'); info = (v.lease && (v.lease.tenant || v.lease.checkIn)) ? `Next tenant: ${esc(v.lease.tenant || '—')}${v.lease.checkIn ? ' · check-in ' + fmt(v.lease.checkIn) : ''}` : 'Ready for inventory or check-in'; btn = `<div class="row2"><button class="btn block ghost" data-act="startInv" data-v="${v.id}">Start inventory</button><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`; }
+      if (!r) { const li = lastInv(v.id); status = chip('', 'Empty'); info = (v.lease && (v.lease.tenant || v.lease.checkIn)) ? `Next tenant: ${esc(v.lease.tenant || '—')}${v.lease.checkIn ? ' · check-in ' + fmt(v.lease.checkIn) : ''}` : 'Ready for inventory or check-in'; if (li) info += `<br>Check-in starts from the inventory of ${fmt(li.invDate)}`; btn = `<div class="row2"><button class="btn block ghost" data-act="startInv" data-v="${v.id}">Start inventory</button><button class="btn block" data-act="startIn" data-v="${v.id}">Start check-in</button></div>`; }
       else if (r.status === 'in_draft') { const w = isInv(r) ? 'inventory' : 'check-in'; status = chip('am', `${isInv(r) ? 'Inventory' : 'Check-in'} photos not sent yet`); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue ${w}</a>`; }
-      else if (r.status === 'checkin_pending') { status = chip('am', 'Waiting for manager approval'); info = isInv(r) ? 'Inventory photos sent' : 'Check-in photos sent'; }
+      else if (r.status === 'checkin_pending') { status = chip('am', 'Waiting for manager approval'); info = isInv(r) ? 'Inventory photos sent' : 'Check-in photos sent'; btn = `<button class="btn block ghost" data-act="takeBack" data-r="${r.id}">Take back to edit</button>`; }
       else if (r.status === 'occupied') {
         const d = daysUntil(r.checkOut);
         status = chip('ok', 'Occupied');
@@ -413,7 +421,7 @@
         btn = `<button class="btn block ${d <= 7 ? '' : 'ghost'}" data-act="startOut" data-r="${r.id}">Start check-out</button>`;
       }
       else if (r.status === 'out_draft') { status = chip('am', 'Check-out photos not sent yet'); btn = `<a class="btn block" href="#/staff/capture/${r.id}">Continue check-out</a>`; }
-      else if (r.status === 'checkout_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-out photos sent'; }
+      else if (r.status === 'checkout_pending') { status = chip('am', 'Waiting for manager approval'); info = 'Check-out photos sent'; btn = `<button class="btn block ghost" data-act="takeBack" data-r="${r.id}">Take back to edit</button>`; }
       return `<div class="villa" data-in="staff" data-vname="${esc(String(v.name).toLowerCase() + ' ' + String(v.area || '').toLowerCase())}"><div class="top"><b>${esc(v.name)}${vMeta(v) ? `<br><small class="note">${vMeta(v)}</small>` : ''}</b><span>${status}</span></div>${info ? `<small>${info}</small>` : ''}${btn}</div>`;
     }).join('');
     app.innerHTML = `<div class="page narrow">
@@ -434,6 +442,7 @@
   const capRooms = (r, phase) => phase === 'in' ? roomsFor(r.villaId) : roomsFor(r.villaId).filter(x => (r.inItems || {})[x.id]);
   const goodPhotos = async ids => { const out = []; for (const id of ids || []) { const p = await getPhoto(id); if (p && !p.dark) out.push(id); } return out; };
 
+  const itemOps = (k, iid) => `<div class="ops"><button class="mv" data-act="mvItem" data-dir="-1" data-room="${k}" data-iid="${iid}" aria-label="Move up">↑</button><button class="mv" data-act="mvItem" data-dir="1" data-room="${k}" data-iid="${iid}" aria-label="Move down">↓</button><button class="del" data-act="delItem" data-room="${k}" data-iid="${iid}" aria-label="Remove item">✕</button></div>`;
   function staffInTable(r, k) {
     const list = r.inItems[k] || [];
     const rows = list.map(it => `<tr data-iid="${it.id}"><td><div class="nmw"><input class="nm" data-k="name" data-room="${k}" data-iid="${it.id}" value="${esc(it.name)}" placeholder="Item name" aria-label="Item name">${it.flag === 'small' ? '<span class="warnico" title="Small item: check the count">⚠</span>' : ''}</div></td>
@@ -441,7 +450,7 @@
       <td><select data-k="cond" data-room="${k}" data-iid="${it.id}" aria-label="Condition">${CONDS.map(c => `<option value="${c}"${c === it.cond ? ' selected' : ''}>${CONDS_ID[c]}</option>`).join('')}</select></td>
       <td><input data-k="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note"></td>
       <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Added' : 'Edited'}</span></td>
-      <td><button class="del" data-act="delItem" data-room="${k}" data-iid="${it.id}" aria-label="Remove item">✕</button></td></tr>`).join('');
+      <td>${itemOps(k, it.id)}</td></tr>`).join('');
     return `<div class="ailist"><p class="note"><b>AI list: ${list.length} item${list.length === 1 ? '' : 's'}.</b> Check names, quantities and condition. ⚠ = small item: count again.</p>
       <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th><th>Source</th><th></th></tr>${rows || '<tr><td colspan="6" class="note">No items yet.</td></tr>'}</table></div>
       <button class="add" data-act="addItem" data-room="${k}">+ Add item</button></div>`;
@@ -474,6 +483,7 @@
       return;
     }
     const photos = r[phase + 'Photos'] || (r[phase + 'Photos'] = {});
+    initAiRead(r, phase);
     const rooms = capRooms(r, phase).map(room => {
       const list = photos[room.id] || [];
       const busy = BUSY.has(`${r.id}:${phase}:${room.id}`);
@@ -491,7 +501,9 @@
         </div>
         ${list.length ? `<div class="thumbs">${list.map(pid => `<div class="th">${phImg(pid, roomName(room.id, 'id'))}<span class="old" data-old="${pid}" hidden>Old photo</span><span class="dark" data-dark="${pid}" hidden>Too dark</span><button class="x" data-act="rmPhoto" data-room="${room.id}" data-pid="${pid}" aria-label="Remove photo">×</button></div>`).join('')}</div>` : ''}
         ${(r.aiNote || {})[phase + ':' + room.id] ? `<div class="banner rd">AI: ${esc(r.aiNote[phase + ':' + room.id])} Retake the photos of this room.</div>` : ''}
-        ${!busy && ((r.aiState || {})[phase + ':' + room.id] === 'fail' || (r.aiState || {})[phase + ':' + room.id] === 'retake') && list.length ? `<button class="btn ghost sm" data-act="retryAi" data-room="${room.id}">↻ Try AI again</button>` : ''}
+        ${(() => { if (busy || !list.length) return ''; const n = unreadIds(r, phase, room.id).length, st = (r.aiState || {})[phase + ':' + room.id];
+          if (n) return `<div class="aicta"><button class="btn" data-act="aiCheck" data-room="${room.id}">✨ Check with AI${n < list.length ? ` (${n} new photo${n === 1 ? '' : 's'})` : ''}</button><span class="note">Take all photos of this room first, then tap. Required before sending.</span>${st === 'fail' ? `<button class="linkbtn" data-act="aiSkip" data-room="${room.id}">AI not working: I listed the items by hand</button>` : ''}</div>`;
+          return `<p class="aidone">${chip('ok', '✓ Checked with AI')}${st === 'fail' || st === 'retake' ? ` <button class="btn ghost sm" data-act="retryAi" data-room="${room.id}">↻ Try AI again</button>` : ''}</p>`; })()}
         ${''}
         <div class="banner rd" data-darkmsg="${room.id}" hidden>Photo too dark for the AI. Turn on the lights or open the curtains, then retake. Remove the dark photo.</div>
         ${body}
@@ -507,6 +519,7 @@
         ${phase === 'in' && !isInv(r) ? `<div class="fld"><label for="f-ten">Tenant name</label><input id="f-ten" data-f="tenant" value="${esc(r.tenant || '')}" placeholder="Tenant name, as on their ID" autocomplete="off"></div>
         <p class="note">${v.lease && v.lease.tenant ? `Expected from the contract: <b>${esc(v.lease.tenant)}</b>. Check it matches the person checking in.` : 'For the manager to double-check against the contract.'}</p>` : ''}</div>
       <p class="sub">Photograph every room. The AI lists the items in each room; check and correct the list before sending it to the manager.</p>
+      ${phase === 'in' && r.fromInv ? `<div class="banner">Filled in from the inventory of ${fmt(r.fromInvDate)}. Check each room against what you see now and fix anything that changed. Retake photos only where something changed. <button class="linkbtn" data-act="clearFromInv" data-r="${r.id}">Start empty instead</button></div>` : ''}
       ${phase === 'in' && !capRooms(r, phase).length ? '<div class="banner">This property has no rooms yet. Type each room name under "Add a room" below, then photograph each one.</div>' : ''}
       ${phase === 'out' ? `<div class="banner">Take the photos from the same angles as the check-in photos.</div>` : ''}
       <p class="note" id="busy" aria-live="polite" hidden></p>
@@ -554,11 +567,25 @@
     }
     if (darkN) toast(`${darkN} photo${darkN === 1 ? ' is' : 's are'} too dark. Retake with more light.`);
     else if (oldN) toast(`${oldN} photo${oldN === 1 ? ' was' : 's were'} taken more than 24 hours ago, marked "Old photo".`);
-    const st = (r.aiState || {})[phase + ':' + room];
-    const good = await goodPhotos(r[phase + 'Photos'][room]);
-    const needAi = good.length && (st === 'fail' || st === 'retake' || (phase === 'in' ? !((r.inItems || {})[room] || []).length : ((r.outItems || {})[room] || [{}])[0].unchecked));
-    if (!needAi) { render(true); return; }
-    runAi(r, phase, room, good);
+    // The AI no longer runs by itself: staff take all photos of the room, then tap "Check with AI".
+    render(true);
+  }
+  // Photos the AI has already read (by photo id). Sending needs every usable photo read.
+  const aiReadOf = r => r.aiRead || (r.aiRead = {});
+  const unreadIds = (r, phase, room) => ((r[phase + 'Photos'] || {})[room] || []).filter(pid => !aiReadOf(r)[pid]);
+  async function unreadRooms(r, phase) {
+    const out = [];
+    for (const x of capRooms(r, phase)) { const u = await goodPhotos(unreadIds(r, phase, x.id)); if (u.length) out.push(x.id); }
+    return out;
+  }
+  // Records started before this change: rooms the AI had already filled count as read.
+  function initAiRead(r, phase) {
+    if (r.aiRead) return;
+    r.aiRead = {};
+    Object.keys(r[phase + 'Photos'] || {}).forEach(room => {
+      const done = phase === 'in' ? ((r.inItems || {})[room] || []).length : ((r.outItems || {})[room] || []).length && !r.outItems[room][0].unchecked;
+      if (done) r[phase + 'Photos'][room].forEach(pid => { r.aiRead[pid] = 1; });
+    });
   }
   // Merge AI items into a list staff may already have edited: keep their rows, add only new names.
   function mergeInItems(cur, fresh) {
@@ -574,10 +601,15 @@
     const sec = document.getElementById('room-' + room); if (sec) sec.scrollIntoView({ block: 'nearest' });
     const finish = msg => { BUSY.delete(key); save(); if (location.hash.endsWith('/capture/' + r.id)) { render(true); toast(msg); } };
     const okMsg = phase === 'in' ? `AI done: ${roomName(room)}. Check the list.` : `AI finished comparing ${roomName(room)}.`;
-    if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); r.aiState[phase + ':' + room] = 'ok'; finish(okMsg); }, 1600); return; }
+    if (!LIVE) { setTimeout(() => { if (phase === 'in') simInRoom(r, room); else simOutRoom(r, room); r.aiState[phase + ':' + room] = 'ok'; ((r[phase + 'Photos'] || {})[room] || []).forEach(pid => { aiReadOf(r)[pid] = 1; }); finish(okMsg); }, 1600); return; }
+    const AI_MAX = 4;
+    const chunks = [];
+    if (phase === 'in') for (let i = 0; i < good.length; i += AI_MAX) chunks.push(good.slice(i, i + AI_MAX));
+    else chunks.push(good.slice(-AI_MAX));
     try {
+     for (const chunk of chunks) {
       const photosB64 = [];
-      for (const pid of good.slice(-4)) { const p = await getPhoto(pid); if (p) photosB64.push(b64(p.data)); }
+      for (const pid of chunk) { const p = await getPhoto(pid); if (p) photosB64.push(b64(p.data)); }
       const body = { phase, villa: villa(r.villaId).name, room: roomName(room, 'en'), photos: photosB64, strong: !!strong };
       const ro = roomObj(room);
       if (phase === 'in' && ro && Array.isArray(ro.cat) && ro.cat.length) body.expected = ro.cat;
@@ -606,13 +638,17 @@
           list.push({ id: uid(), name: e.name, inQty: 0, inCond: 'Good', inNote: '', qty: parseInt(e.qty, 10) || 1, cond: e.cond || 'Good', note: e.note || 'Not on check-in list', unchecked: false, touched: false });
         });
       }
+      // Mark what was read: the photos sent (check-in), or every photo of the room (check-out compares the whole room at once).
+      (phase === 'in' ? chunk : ((r.outPhotos || {})[room] || [])).forEach(pid => { aiReadOf(r)[pid] = 1; });
+      save();
+     }
       finish(res.quality === 'retake' ? 'AI: photo not clear enough. See the note in that room.' : okMsg);
     } catch (e) {
       if (phase === 'in') { r.inItems = r.inItems || {}; r.inItems[room] = r.inItems[room] || []; }
       r.aiState[phase + ':' + room] = 'fail';
       if (e && e.status === 401) { BUSY.delete(key); return; }
       // The normal model failed (bad or cut-off reply, server error): try once with the stronger model before asking staff.
-      if (!strong && (!e || !e.status || e.status >= 500)) { BUSY.delete(key); return runAi(r, phase, room, good, true); }
+      if (!strong && (!e || !e.status || e.status >= 500)) { BUSY.delete(key); return runAi(r, phase, room, good.filter(pid => !aiReadOf(r)[pid]), true); }
       finish('AI could not be reached. Tap "Try AI again", or add the items by hand.');
     }
   }
@@ -628,6 +664,12 @@
       if (!p && !(r.photoFiles || {})[pid]) { err.hidden = false; err.textContent = 'A photo is missing from this phone (storage full?). Remove the empty photo and retake it.'; return; }
       if (p && p.dark) { err.hidden = false; err.textContent = 'A photo is still too dark. Remove it (marked red) or retake it first.'; return; }
     } }
+    const unread = await unreadRooms(r, phase);
+    if (unread.length) {
+      err.hidden = false; err.textContent = `Check with AI first, in: ${unread.map(k => roomName(k)).join(', ')}. Tap "✨ Check with AI" in each of these rooms.`;
+      const sec = document.getElementById('room-' + unread[0]); if (sec) sec.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
     if (phase === 'in') {
       const z = dropZeroQty(r);
       if (z) toast(`${z} item${z === 1 ? '' : 's'} with quantity 0 removed from the list.`);
@@ -642,7 +684,7 @@
       }
       if (!Object.values(r.inItems || {}).some(l => l.length)) { err.hidden = false; err.textContent = 'The item list is empty. Wait for the AI or add items.'; return; }
     }
-    const missing = capRooms(r, phase).filter(x => !(photos[x.id] || []).length).map(x => roomName(x.id));
+    const missing = capRooms(r, phase).filter(x => !(photos[x.id] || []).length && (r.mgrRooms || []).indexOf(x.id) < 0).map(x => roomName(x.id));
     if (missing.length) {
       err.hidden = false;
       err.textContent = `Every room needs a photo. No photo yet: ${missing.join(', ')}.${phase === 'in' ? ' If a room does not exist in this villa, tap "Remove room" next to its name.' : ''}`;
@@ -862,10 +904,12 @@
   }
 
   function photoCol(list, label, max) {
-    const ids = (list || []).slice(0, max || 4);
+    const ids = (list || []).slice(0, max || 99);
     return ids.length ? ids.map(pid => phImg(pid, label)).join('') : phEmpty(label === 'Check-in' ? 'No photo' : 'No photo');
   }
 
+  // Rooms of this record that have no photo (rooms the manager added while reviewing need none).
+  const recNoPhoto = r => r.seeded ? [] : Object.keys(r.inItems || {}).filter(k => !(r.inPhotos[k] || []).length && (r.mgrRooms || []).indexOf(k) < 0);
   function viewCheckIn(r) {
     const v = villa(r.villaId);
     const edit = r.status === 'checkin_pending';
@@ -875,7 +919,7 @@
     const roomIds = roomsFor(r.villaId).map(x => x.id).filter(k => items[k] || (r.inPhotos[k] || []).length);
     const nItems = Object.values(items).reduce((a, l) => a + l.length, 0);
     const nPh = count(r.inPhotos);
-    const noPhotoRooms = r.seeded ? [] : roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length).map(x => x.en);
+    const noPhotoRooms = recNoPhoto(r).map(k => roomName(k, 'en'));
     const blocks = roomIds.map(k => {
       const list = items[k] || [];
       const rowsHtml = list.map(it => edit
@@ -883,13 +927,14 @@
             <td><input class="q" type="number" min="0" data-k="qty" data-room="${k}" data-iid="${it.id}" value="${it.qty}" aria-label="Quantity"></td>
             <td><select data-k="cond" data-room="${k}" data-iid="${it.id}" aria-label="Condition">${CONDS.map(c => `<option${c === it.cond ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
             <td><input data-k="note" data-room="${k}" data-iid="${it.id}" value="${esc(it.note)}" placeholder="Note" aria-label="Note"></td>
-            <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Added by staff' : 'Edited'}</span></td></tr>`
+            <td><span class="src ${it.src}" data-src="${it.id}">${it.src === 'ai' ? 'AI' : it.src === 'added' ? 'Added' : 'Edited'}</span></td><td>${itemOps(k, it.id)}</td></tr>`
         : `<tr><td>${esc(it.name)}</td><td class="num">${it.qty}</td><td>${it.cond === 'Good' ? it.cond : chip(it.cond === 'Damaged' ? 'rd' : 'wr', it.cond)}</td><td class="note">${esc(it.note)}</td></tr>`).join('');
       return `<div class="rblock">
-        <div class="ph">${photoCol(r.inPhotos[k], 'Check-in', 6)}</div>
+        <div class="ph">${photoCol(r.inPhotos[k], 'Check-in', 99)}</div>
         <div style="min-width:0;display:flex;flex-direction:column">
-          <h3>${esc(roomName(k, 'en'))} ${chip('', plural(list.length, 'item'))}</h3>
-          <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th>${edit ? '<th>Source</th>' : ''}</tr>${rowsHtml || `<tr><td colspan="6" class="note">No items.</td></tr>`}</table></div>
+          <div class="roomhead"><h3>${esc(roomName(k, 'en'))} ${chip('', plural(list.length, 'item'))}</h3>${edit ? `<button class="linkbtn rmroom" data-act="rmRecRoom" data-room="${k}">Remove room</button>` : ''}</div>
+          <div style="overflow-x:auto"><table class="itbl"><tr><th>Item</th><th>Qty</th><th>Condition</th><th>Note</th>${edit ? '<th>Source</th><th></th>' : ''}</tr>${rowsHtml || `<tr><td colspan="6" class="note">No items.</td></tr>`}</table></div>
+          ${edit ? `<button class="add" data-act="addItem" data-room="${k}">+ Add item</button>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -918,6 +963,7 @@ ${isInv(r) ? `
       ${edit ? '<p class="note">Items with quantity 0 are removed when you approve.</p>' : ''}
       ${!edit && r.seeded ? `<div class="banner">Sample lease: this check-in was prepared as demo data, so it has no photos.</div>` : ''}
       ${blocks}
+      ${edit ? `<div class="card addroom"><h3>Add a room</h3><div class="row"><input id="newRoom" placeholder="Type a room name" aria-label="Room name"><button class="btn ghost" data-act="addRoom" data-v="${r.villaId}" data-r="${r.id}">+ Add</button></div><p class="note">The room is added to this ${isInv(r) ? 'inventory' : 'check-in'} and to the property. Then add its items.</p></div>` : ''}
       <div class="actions">
         <div>${edit ? (isInv(r) ? '<p class="note">Check the list and the inventory date, then approve. The villa stays empty.</p>' : '<p class="note">Check the list, add the check-in and check-out dates (tenant details are optional), then approve.</p>') : isInv(r) ? '<p class="note">Inventory approved.</p>' : `<p class="note">Approved. Check-out reminders: ${rem}</p>`}<p class="err" role="alert" id="apErr" hidden></p></div>
         <div class="row">
@@ -1028,45 +1074,49 @@ ${isInv(r) ? `
         doc.text(val, vx, yy);
       });
       y += Math.ceil(meta.length / 2) * 6 + 4;
-      const photoRow = async (ids0, label, maxN) => {
-        const ids = await goodPhotos(ids0);
-        const n = Math.max(1, Math.min(maxN, ids.length || 1)); const gap = 3;
-        const bw = (W - 2 * M - gap * (maxN - 1)) / maxN, bh = bw * 0.75;
+      const drawPh = async (pid, x, bw, bh) => {
+        doc.setFillColor(238, 242, 240); doc.rect(x, y, bw, bh, 'F');
+        const p = pid ? await getPhoto(pid) : null;
+        if (p) { const ratio = p.w / p.h; let dw = bw, dh = bw / ratio; if (dh > bh) { dh = bh; dw = bh * ratio; } doc.addImage(p.data, 'JPEG', x + (bw - dw) / 2, y + (bh - dh) / 2, dw, dh); }
+        return !!p;
+      };
+      // Every photo of the room, perRow per row, wrapping onto new rows (and pages) as needed.
+      const photoRow = async (ids0, label, perRow) => {
+        const ids = await goodPhotos(ids0); const gap = 3;
+        const bw = (W - 2 * M - gap * (perRow - 1)) / perRow, bh = bw * 0.75;
         need(bh + 8);
         doc.setFontSize(8); doc.setTextColor(...MUTED); doc.text(label, M, y); doc.setTextColor(...DARK); y += 2;
         if (!ids.length) {
           doc.setFillColor(238, 242, 240); doc.rect(M, y, bw, bh, 'F');
           doc.setFontSize(8); doc.setTextColor(...MUTED); doc.text('No photo', M + bw / 2, y + bh / 2, { align: 'center' }); doc.setTextColor(...DARK);
+          y += bh + 5; return;
         }
-        for (let i = 0; i < Math.min(n, ids.length); i++) {
-          const p = await getPhoto(ids[i]); const x = M + i * (bw + gap);
-          doc.setFillColor(238, 242, 240); doc.rect(x, y, bw, bh, 'F');
-          if (p) {
-            const ratio = p.w / p.h; let dw = bw, dh = bw / ratio;
-            if (dh > bh) { dh = bh; dw = bh * ratio; }
-            doc.addImage(p.data, 'JPEG', x + (bw - dw) / 2, y + (bh - dh) / 2, dw, dh);
-          }
+        for (let i = 0; i < ids.length; i++) {
+          const col = i % perRow;
+          if (col === 0 && i > 0) { y += bh + gap; need(bh + 2); }
+          await drawPh(ids[i], M + col * (bw + gap), bw, bh);
         }
         y += bh + 5;
       };
-      // check-in (left) vs check-out (right), up to 2 photos each, same row
+      // Check-in (left) vs check-out (right), 2 photos per side per row, as many rows as needed.
       const photoPair = async (inIds0, outIds0) => {
         const inIds = await goodPhotos(inIds0), outIds = await goodPhotos(outIds0);
         const gap = 3, mid = 6, half = (W - 2 * M - mid) / 2, bw = (half - gap) / 2, bh = bw * 0.75;
+        const rows = Math.max(1, Math.ceil(inIds.length / 2), Math.ceil(outIds.length / 2));
         need(bh + 9);
         doc.setFontSize(8); doc.setTextColor(...MUTED);
         doc.text('Check-in', M, y); doc.text('Check-out', M + half + mid, y); doc.setTextColor(...DARK); y += 2;
-        const draw = async (ids, x0) => {
-          for (let i = 0; i < 2; i++) {
-            const x = x0 + i * (bw + gap);
-            doc.setFillColor(238, 242, 240); doc.rect(x, y, bw, bh, 'F');
-            const p = ids[i] ? await getPhoto(ids[i]) : null;
-            if (p) { const ratio = p.w / p.h; let dw = bw, dh = bw / ratio; if (dh > bh) { dh = bh; dw = bh * ratio; } doc.addImage(p.data, 'JPEG', x + (bw - dw) / 2, y + (bh - dh) / 2, dw, dh); }
-            else if (i === 0) { doc.setFontSize(8); doc.setTextColor(...MUTED); doc.text('No photo', x + bw / 2, y + bh / 2, { align: 'center' }); doc.setTextColor(...DARK); }
+        for (let rw = 0; rw < rows; rw++) {
+          if (rw > 0) { y += bh + gap; need(bh + 2); }
+          for (const [ids, x0] of [[inIds, M], [outIds, M + half + mid]]) {
+            for (let i = 0; i < 2; i++) {
+              const pid = ids[rw * 2 + i], x = x0 + i * (bw + gap);
+              if (!pid) { if (rw === 0 && i === 0) { doc.setFillColor(238, 242, 240); doc.rect(x, y, bw, bh, 'F'); doc.setFontSize(8); doc.setTextColor(...MUTED); doc.text('No photo', x + bw / 2, y + bh / 2, { align: 'center' }); doc.setTextColor(...DARK); } continue; }
+              await drawPh(pid, x, bw, bh);
+            }
           }
-        };
-        await draw(inIds, M); await draw(outIds, M + half + mid);
-        doc.setDrawColor(217, 224, 221); doc.line(M + half + mid / 2, y, M + half + mid / 2, y + bh);
+          doc.setDrawColor(217, 224, 221); doc.line(M + half + mid / 2, y, M + half + mid / 2, y + bh);
+        }
         y += bh + 5;
       };
       // Keep the room heading on the same page as its first photos and table rows.
@@ -1194,6 +1244,17 @@ ${isInv(r) ? `
       S.user = u.id; S.role = isMgrRole(u.role) ? 'mgr' : 'staff'; save(); go(isMgrRole(u.role) ? '#/mgr' : '#/staff');
     } finally { btn.disabled = false; }
   });
+  // Leaving a capture page with photos the AI has not read: warn once (the draft stays saved on this phone).
+  const capUnread = () => { const m = location.hash.match(/\/capture\/([^/]+)/); if (!m) return []; const r = rec(m[1]); if (!r || (r.status !== 'in_draft' && r.status !== 'out_draft')) return [];
+    const ph = phaseOf(r); return capRooms(r, ph).filter(x => unreadIds(r, ph, x.id).length).map(x => roomName(x.id)); };
+  let leaveArmed = 0;
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href^="#"]'); if (!a) return;
+    const u = capUnread(); if (!u.length || Date.now() - leaveArmed < 8000) return;
+    e.preventDefault(); leaveArmed = Date.now();
+    toast(`Not checked with AI yet: ${u.join(', ')}. Your work is saved on this phone. Tap again to leave anyway.`);
+  }, true);
+  window.addEventListener('beforeunload', e => { if (capUnread().length) { e.preventDefault(); e.returnValue = ''; } });
   // Villa search (filters the list as you type) and sort order.
   app.addEventListener('input', e => {
     const t = e.target; if (!t.classList || !t.classList.contains('vsearch')) return;
@@ -1288,15 +1349,19 @@ ${isInv(r) ? `
       const inp = document.getElementById('newRoom'); const name = b.dataset.name || (inp ? inp.value.trim() : '');
       if (!name) { toast(T('Ketik nama ruangan dulu.', 'Type the room name first.')); return; }
       const v = villa(b.dataset.v); v.rooms = v.rooms || [];
-      if (roomsFor(v.id).some(x => x.en.toLowerCase() === name.toLowerCase())) { toast('This room already exists.'); return; }
+      const ex = roomsFor(v.id).find(x => x.en.toLowerCase() === name.toLowerCase());
+      if (ex && b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems && !r.inItems[ex.id]) { r.inItems[ex.id] = []; if (r.status === 'checkin_pending') { r.mgrRooms = (r.mgrRooms || []).concat([ex.id]); r._dirty = true; } save(); render(true); toast(`${ex.en} added.`); return; } }
+      if (ex) { toast('This room already exists.'); return; }
       const hidden = ROOMS.find(x => x.en.toLowerCase() === name.toLowerCase() && (v.hideRooms || []).indexOf(x.id) >= 0);
       if (hidden) { v.hideRooms = v.hideRooms.filter(x => x !== hidden.id); pushSettings(); save(); toast(`${hidden.en} added back.`); render(true); return; }
       const room = { id: 'rm-' + uid(), en: name, id_: b.dataset.nameId || name }; v.rooms.push(room); pushSettings();
-      if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) r.inItems[room.id] = []; }
+      if (b.dataset.r) { const r = rec(b.dataset.r); if (r && r.inItems) { r.inItems[room.id] = []; if (r.status === 'checkin_pending') r.mgrRooms = (r.mgrRooms || []).concat([room.id]); r._dirty = true; } }
       save(); toast(T(`${room.id_} ditambahkan. Ambil foto atau tambah barang.`, `${name} added.`)); render(true);
     }
     else if (act === 'startIn' || act === 'startInv') {
       const r = Object.assign({ id: uid(), villaId: b.dataset.v, tenant: '', invDate: iso(today()), checkIn: '', checkOut: '', status: 'in_draft', inPhotos: {}, inItems: {}, outPhotos: {}, outItems: null, createdAt: Date.now() }, act === 'startInv' ? { kind: 'inv' } : {});
+      const inv = act === 'startIn' ? lastInv(b.dataset.v) : null;
+      if (inv) fillFromInv(r, inv);
       S.records.push(r); save(); pushRecord(r).catch(e2 => onSaveError(r, e2, 'Not saved to the server yet. It will be retried when you send.')); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`);
     }
     else if (act === 'cancelDraft') {
@@ -1316,6 +1381,35 @@ ${isInv(r) ? `
       const r = rec(location.hash.split('/')[3]); if (!r) return; const phase = phaseOf(r);
       goodPhotos((r[phase + 'Photos'] || {})[b.dataset.room]).then(good => { if (good.length) runAi(r, phase, b.dataset.room, good, true); else toast('Add a bright photo first.'); });
     }
+    else if (act === 'aiCheck') {
+      const r = rec(location.hash.split('/')[3]); if (!r) return; const phase = phaseOf(r), room = b.dataset.room;
+      goodPhotos(unreadIds(r, phase, room)).then(good => {
+        if (!good.length) { toast('These photos are too dark. Retake them with more light.'); return; }
+        // Check-out compares the whole room, so it reads the latest photos of the room, not only the new ones.
+        if (phase === 'out') goodPhotos((r.outPhotos || {})[room]).then(all => runAi(r, phase, room, all, (r.aiState || {})['out:' + room] === 'fail'));
+        else runAi(r, phase, room, good, (r.aiState || {})['in:' + room] === 'fail');
+      });
+    }
+    else if (act === 'takeBack') {
+      const r = rec(b.dataset.r); if (!r || (r.status !== 'checkin_pending' && r.status !== 'checkout_pending')) return;
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to take it back (the manager cannot approve until you send again)'; return; }
+      const prev = r.status; r.status = prev === 'checkin_pending' ? 'in_draft' : 'out_draft'; save();
+      pushRecord(r).then(() => { toast('Taken back. Edit and send again.'); go(`#/${S.role === 'mgr' ? 'mgr' : 'staff'}/capture/${r.id}`); })
+        .catch(e2 => { if (e2.status !== 409) { r.status = prev; delete r._dirty; save(); render(); }
+          onSaveError(r, e2, e2.status === 403 ? 'Could not take it back. If the manager has not approved it yet, this needs a small server update: ask the manager to make the change for now.' : 'Could not take it back: check the connection and try again.'); });
+    }
+    else if (act === 'clearFromInv') {
+      const r = rec(b.dataset.r); if (!r || r.status !== 'in_draft') return;
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again: remove all items and photos from the inventory'; return; }
+      r.inItems = {}; r.inPhotos = {}; r.photoFiles = {}; r.aiRead = {}; r.aiState = {}; delete r.fromInv; delete r.fromInvDate; save(); render(true);
+    }
+    else if (act === 'aiSkip') {
+      const r = rec(location.hash.split('/')[3]); if (!r) return; const phase = phaseOf(r);
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to confirm the items are listed by hand'; return; }
+      ((r[phase + 'Photos'] || {})[b.dataset.room] || []).forEach(pid => { aiReadOf(r)[pid] = 1; }); r.aiSkipped = (r.aiSkipped || []).concat([b.dataset.room]);
+      if (phase === 'in') { r.inItems = r.inItems || {}; r.inItems[b.dataset.room] = r.inItems[b.dataset.room] || []; }
+      save(); render(true);
+    }
     else if (act === 'hideRoom') {
       const v = villa(b.dataset.v); if (!v) return;
       if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to remove this room (its photos and items too)'; return; }
@@ -1334,6 +1428,18 @@ ${isInv(r) ? `
       save(); render(true);
     }
     else if (act === 'send') sendPhotos(rec(b.dataset.r));
+    else if (act === 'mvItem') {
+      const r = rec(location.hash.split('/')[3]); const l = (r.inItems || {})[b.dataset.room]; if (!l) return;
+      const i = l.findIndex(x => x.id === b.dataset.iid), j = i + parseInt(b.dataset.dir, 10);
+      if (i < 0 || j < 0 || j >= l.length) return;
+      [l[i], l[j]] = [l[j], l[i]]; if (r.status === 'checkin_pending') r._dirty = true; save(); render(true);
+      const nb = app.querySelector(`[data-act="mvItem"][data-iid="${b.dataset.iid}"][data-dir="${b.dataset.dir}"]`); if (nb) nb.focus();
+    }
+    else if (act === 'rmRecRoom') {
+      const r = rec(location.hash.split('/')[3]); if (!r || r.status !== 'checkin_pending') return;
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to remove this room from the record'; return; }
+      delete r.inItems[b.dataset.room]; if (r.inPhotos) delete r.inPhotos[b.dataset.room]; r._dirty = true; save(); render(true);
+    }
     else if (act === 'delItem') {
       const r = rec(location.hash.split('/')[3]); const l = r.inItems[b.dataset.room];
       const i = l.findIndex(x => x.id === b.dataset.iid); if (i >= 0) l.splice(i, 1);
@@ -1355,7 +1461,7 @@ ${isInv(r) ? `
       if (r.checkIn && r.checkOut && r.checkOut <= r.checkIn) probs.push('The check-out date must be after the check-in date.');
       if (r.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email)) probs.push('Enter a valid tenant email address, or leave it blank.');
       }
-      const noPh = r.seeded ? [] : roomsFor(r.villaId).filter(x => !(r.inPhotos[x.id] || []).length).map(x => x.en);
+      const noPh = recNoPhoto(r).map(k => roomName(k, 'en'));
       if (noPh.length) probs.push(`Every room needs a photo. Missing: ${noPh.join(', ')}.`);
       const blank = Object.values(r.inItems || {}).some(l => l.some(i => !i.name.trim()));
       if (blank) probs.push('Some items have no name. Fill them in or remove them.');
